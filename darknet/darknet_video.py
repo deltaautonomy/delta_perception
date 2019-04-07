@@ -1,120 +1,141 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+'''
+Author  : Heethesh Vhavle
+Email   : heethesh@cmu.edu
+Version : 1.0.0
+Date    : Apr 07, 2019
+
+References:
+https://github.com/AlexeyAB/darknet
+'''
+
+if __name__ == '__main__':
+    import sys
+    sys.path.append('..')
+
+# Handle paths and OpenCV import
+from scripts.init_paths import *
+
+# Built-in modules
 from ctypes import *
-import math
-import random
-import os
-import cv2
-import numpy as np
-import time
+
+# Local python modules
 import darknet
 
-def convertBack(x, y, w, h):
-    xmin = int(round(x - (w / 2)))
-    xmax = int(round(x + (w / 2)))
-    ymin = int(round(y - (h / 2)))
-    ymax = int(round(y + (h / 2)))
-    return xmin, ymin, xmax, ymax
+# Global variables
+DARKNET_PATH = osp.join(PKG_PATH, 'darknet')
 
 
-def cvDrawBoxes(detections, img):
-    for detection in detections:
-        x, y, w, h = detection[2][0],\
-            detection[2][1],\
-            detection[2][2],\
-            detection[2][3]
-        xmin, ymin, xmax, ymax = convertBack(
-            float(x), float(y), float(w), float(h))
-        pt1 = (xmin, ymin)
-        pt2 = (xmax, ymax)
-        cv2.rectangle(img, pt1, pt2, (0, 255, 0), 1)
-        cv2.putText(img,
-                    detection[0].decode() +
-                    " [" + str(round(detection[1] * 100, 2)) + "]",
-                    (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
-                    [0, 255, 0], 2)
-    return img
+class YOLO:
+    def __init__(self, configPath=None, weightPath=None, metaPath=None, thresh=0.25):   
+        # YOLO parameters
+        self.thresh = thresh
+
+        # Set paths
+        if configPath is None: self.configPath = osp.join(DARKNET_PATH, 'cfg/yolov3.cfg')
+        if not osp.exists(self.configPath):
+            raise ValueError('Invalid config path `' + osp.abspath(self.configPath) + '`')
+
+        if weightPath is None: self.weightPath = osp.join(DARKNET_PATH, 'weights/yolov3.weights')
+        if not osp.exists(self.weightPath):
+            raise ValueError('Invalid weight path `' + osp.abspath(self.weightPath) + '`')
+
+        if metaPath is None: self.metaPath = osp.join(DARKNET_PATH, 'cfg/coco.data')
+        if not osp.exists(self.metaPath):
+            raise ValueError('Invalid data file path `' + osp.abspath(self.metaPath) + '`')
+        
+    def setup(self, netMain=None, metaMain=None, altNames=None):
+        # Load the model
+        if netMain is None:
+            self.netMain = darknet.load_net_custom(self.configPath.encode(
+                'ascii'), self.weightPath.encode('ascii'), 0, 1) # batch size = 1
+        
+        if metaMain is None:
+            self.metaMain = darknet.load_meta(self.metaPath.encode('ascii'))
+        
+        if altNames is None:
+            try:
+                with open(self.metaPath) as metaFH:
+                    metaContents = metaFH.read()
+                    import re
+                    match = re.search('names *= *(.*)$', metaContents, re.IGNORECASE | re.MULTILINE)
+                    if match: result = match.group(1)
+                    else: result = None
+                    try:
+                        if osp.exists(result):
+                            with open(result) as namesFH:
+                                namesList = namesFH.read().strip().split('\n')
+                                self.altNames = [x.strip() for x in namesList]
+                    except TypeError:
+                        pass
+            except Exception:
+                pass
+
+        # Create an image we reuse for each detect
+        self.darknet_image = darknet.make_image(darknet.network_width(self.netMain),
+            darknet.network_height(self.netMain), 3)
+
+        # Performance logging
+        self.count = 0
+        self.total = 0
+
+    def run(self, frame):
+        self.prev_time = time.time()
+
+        # Preprocess image
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        frame_resized = cv2.resize(frame_rgb, (darknet.network_width(self.netMain),
+            darknet.network_height(self.netMain)), interpolation=cv2.INTER_LINEAR)
+        
+        # Forward pass
+        darknet.copy_image_from_bytes(self.darknet_image, frame_resized.tobytes())
+        detections = darknet.detect_image(self.netMain, self.metaMain, self.darknet_image, thresh=self.thresh)
+
+        self.total += time.time() - self.prev_time
+        self.count += 1
+        print('FPS:', self.count / self.total)
+  
+    @staticmethod    
+    def convertBack(x, y, w, h):
+        xmin = int(round(x - (w / 2)))
+        xmax = int(round(x + (w / 2)))
+        ymin = int(round(y - (h / 2)))
+        ymax = int(round(y + (h / 2)))
+        return xmin, ymin, xmax, ymax
+
+    @staticmethod
+    def cvDrawBoxes(detections, img):
+        for detection in detections:
+            x, y, w, h = detection[2][0],\
+                detection[2][1],\
+                detection[2][2],\
+                detection[2][3]
+            xmin, ymin, xmax, ymax = YOLO.convertBack(
+                float(x), float(y), float(w), float(h))
+            pt1 = (xmin, ymin)
+            pt2 = (xmax, ymax)
+            cv2.rectangle(img, pt1, pt2, (0, 255, 0), 1)
+            cv2.putText(img,
+                        detection[0].decode() +
+                        ' [' + str(round(detection[1] * 100, 2)) + ']',
+                        (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        [0, 255, 0], 2)
+        return img
 
 
-netMain = None
-metaMain = None
-altNames = None
+if __name__ == '__main__':
+    yolo = YOLO()
+    yolo.setup()
 
-
-def YOLO():
-    global metaMain, netMain, altNames
-    configPath = "./cfg/yolov3.cfg"
-    weightPath = "./weights/yolov3.weights"
-    metaPath = "./cfg/coco.data"
-    if not os.path.exists(configPath):
-        raise ValueError("Invalid config path `" +
-                         os.path.abspath(configPath)+"`")
-    if not os.path.exists(weightPath):
-        raise ValueError("Invalid weight path `" +
-                         os.path.abspath(weightPath)+"`")
-    if not os.path.exists(metaPath):
-        raise ValueError("Invalid data file path `" +
-                         os.path.abspath(metaPath)+"`")
-    if netMain is None:
-        netMain = darknet.load_net_custom(configPath.encode(
-            "ascii"), weightPath.encode("ascii"), 0, 1)  # batch size = 1
-    if metaMain is None:
-        metaMain = darknet.load_meta(metaPath.encode("ascii"))
-    if altNames is None:
-        try:
-            with open(metaPath) as metaFH:
-                metaContents = metaFH.read()
-                import re
-                match = re.search("names *= *(.*)$", metaContents,
-                                  re.IGNORECASE | re.MULTILINE)
-                if match:
-                    result = match.group(1)
-                else:
-                    result = None
-                try:
-                    if os.path.exists(result):
-                        with open(result) as namesFH:
-                            namesList = namesFH.read().strip().split("\n")
-                            altNames = [x.strip() for x in namesList]
-                except TypeError:
-                    pass
-        except Exception:
-            pass
-    #cap = cv2.VideoCapture(0)
-    cap = cv2.VideoCapture("mission_impossible.mp4")
+    cap = cv2.VideoCapture(osp.join(DARKNET_PATH, 'mission_impossible.mp4'))
     cap.set(3, 1280)
     cap.set(4, 720)
-    # out = cv2.VideoWriter(
-        # "output.avi", cv2.VideoWriter_fourcc(*"MJPG"), 10.0,
-        # (darknet.network_width(netMain), darknet.network_height(netMain)))
-    print("Starting the YOLO loop...")
 
-    # Create an image we reuse for each detect
-    darknet_image = darknet.make_image(darknet.network_width(netMain),
-                                    darknet.network_height(netMain), 3)
-
-    count = 0
-    total = 0
     while True:
-        prev_time = time.time()
-        ret, frame_read = cap.read()
-        frame_rgb = cv2.cvtColor(frame_read, cv2.COLOR_BGR2RGB)
-        frame_resized = cv2.resize(frame_rgb,
-                                   (darknet.network_width(netMain),
-                                    darknet.network_height(netMain)),
-                                   interpolation=cv2.INTER_LINEAR)
-
-        darknet.copy_image_from_bytes(darknet_image,frame_resized.tobytes())
-
-        detections = darknet.detect_image(netMain, metaMain, darknet_image, thresh=0.25)
-        # image = cvDrawBoxes(detections, frame_resized)
-        # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-        total += time.time() - prev_time
-        count += 1
-        print('FPS:', count / total)
-        # cv2.imshow('Demo', image)
-        # cv2.waitKey(3)
-    cap.release()
-    # out.release()
-
-if __name__ == "__main__":
-    YOLO()
+        ret, frame = cap.read()
+        if not ret:
+            cap.release()
+            break
+        yolo.run(frame)

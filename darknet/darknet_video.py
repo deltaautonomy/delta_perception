@@ -11,21 +11,35 @@ References:
 https://github.com/AlexeyAB/darknet
 '''
 
+# Python 2/3 compatibility
+from __future__ import print_function, absolute_import, division
+
+# Standalone
 if __name__ == '__main__':
     import sys
     sys.path.append('..')
 
-# Handle paths and OpenCV import
-from scripts.init_paths import *
+    # Handle paths and OpenCV import
+    from scripts.init_paths import *
+
+# Run from scripts module
+else:
+    # Handle paths and OpenCV import
+    from init_paths import *
 
 # Built-in modules
 from ctypes import *
 
 # Local python modules
-import darknet
+import darknet.darknet as darknet
 
 # Global variables
 DARKNET_PATH = osp.join(PKG_PATH, 'darknet')
+
+# Handle package path and COCO names path
+print('Darknet Package:', DARKNET_PATH)
+add_path(DARKNET_PATH)
+darknet.fix_coco_names_path(DARKNET_PATH)
 
 
 class YOLO:
@@ -88,7 +102,7 @@ class YOLO:
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_resized = cv2.resize(frame_rgb, (darknet.network_width(self.netMain),
             darknet.network_height(self.netMain)), interpolation=cv2.INTER_LINEAR)
-        
+
         # Forward pass
         darknet.copy_image_from_bytes(self.darknet_image, frame_resized.tobytes())
         detections = darknet.detect_image(self.netMain, self.metaMain, self.darknet_image, thresh=self.thresh)

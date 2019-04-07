@@ -18,6 +18,7 @@ import inspect
 import platform
 import os.path as osp
 
+
 def add_path(path):
     if path not in sys.path:
         sys.path.insert(0, path)
@@ -32,7 +33,7 @@ if python_version.startswith('3'):
     if ROS_CV in sys.path: sys.path.remove(ROS_CV)
     import cv2
     print('OpenCV Version (Build Py3):', cv2.__version__)
-    if ROS_CV not in sys.path: sys.path.insert(0, ROS_CV)
+    add_path(ROS_CV)
 else:
     import cv2
     print('OpenCV Version (ROS):', cv2.__version__)
@@ -47,12 +48,10 @@ import numpy as np
 # Handle paths
 THIS_PATH = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
 PKG_PATH = os.path.dirname(THIS_PATH)
+add_path(PKG_PATH)
 
 # Display paths
 print('Package Path:', PKG_PATH)
 
-# Add lib to PYTHONPATH
-# lib_path = osp.join(this_dir, 'faster_rcnn')
-# add_path(lib_path)
-
+# Setup complete
 print('\n' + '*' * 30 + ' Delta Perception ' + '*' * 30 + '\n')

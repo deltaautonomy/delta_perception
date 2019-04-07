@@ -28,9 +28,10 @@ Windows Python 2.7 version: https://github.com/AlexeyAB/darknet/blob/fc496d52bf2
 """
 #pylint: disable=R, W0401, W0614, W0703
 from ctypes import *
+import os
 import math
 import random
-import os
+import inspect
 
 def sample(probs):
     s = sum(probs)
@@ -119,7 +120,8 @@ if os.name == "nt":
             lib = CDLL(winGPUdll, RTLD_GLOBAL)
             print("Environment variables indicated a CPU run, but we didn't find `"+winNoGPUdll+"`. Trying a GPU run anyway.")
 else:
-    lib = CDLL("./libdarknet.so", RTLD_GLOBAL)
+    this_path = os.path.dirname(os.path.abspath(inspect.getfile(inspect.currentframe())))
+    lib = CDLL(os.path.join(this_path, "./libdarknet.so"), RTLD_GLOBAL)
 lib.network_width.argtypes = [c_void_p]
 lib.network_width.restype = c_int
 lib.network_height.argtypes = [c_void_p]
@@ -201,6 +203,32 @@ rgbgr_image.argtypes = [IMAGE]
 predict_image = lib.network_predict_image
 predict_image.argtypes = [c_void_p, IMAGE]
 predict_image.restype = POINTER(c_float)
+
+
+def fix_coco_names_path(darknet_path):
+    from tempfile import mkstemp
+    from shutil import move
+    from os import fdopen, remove
+
+    file_path = os.path.join(darknet_path, 'cfg/coco.data')
+    if not os.path.exists(file_path):
+        raise ValueError('Invalid path `%s`' % file_path)
+
+    # Create temp file
+    fh, abs_path = mkstemp()
+    with fdopen(fh, 'w') as new_file:
+        with open(file_path) as old_file:
+            for line in old_file:
+                if line.startswith('names'):
+                    new_file.write('names = %s\n' % os.path.join(darknet_path, 'data/coco.names'))
+                else:
+                    new_file.write(line)
+    
+    # Remove original file
+    remove(file_path)
+    
+    # Move new file
+    move(abs_path, file_path)
 
 def array_to_image(arr):
     import numpy as np

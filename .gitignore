@@ -6,6 +6,8 @@ weights/
 darknet/darknet
 darknet/results
 darknet/backup
+darknet/mission_impossible.mp4
+darknet/uselib
 
 # Prerequisites
 *.d

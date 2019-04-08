@@ -50,6 +50,7 @@ You should be able to echo the `/delta/ground_truth/vehicles` topic. A sample me
 rostopic echo /delta/ground_truth/vehicles
 ```
 
+```
 ---
 header: 
   seq: 13

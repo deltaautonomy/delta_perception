@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+    <!-- Play rosbag record -->
+    <include file="$(find delta_perception)/launch/play_rosbag.launch">
+        <arg name="filename" value="/mnt/data/Datasets/Carla/bags/portland-02.bag" />
+    </include>
+
+    <!-- Run the perception pipeline -->
+    <node   
+        pkg="main"
+        type="main.py"
+        name="main"
+        output="screen">
+    </node>
+
+</launch>

@@ -230,6 +230,13 @@ def fix_coco_names_path(darknet_path):
     # Move new file
     move(abs_path, file_path)
 
+def convert_back(x, y, w, h):
+        xmin = int(round(x - (w / 2)))
+        xmax = int(round(x + (w / 2)))
+        ymin = int(round(y - (h / 2)))
+        ymax = int(round(y + (h / 2)))
+        return xmin, ymin, xmax, ymax
+
 def array_to_image(arr):
     import numpy as np
     # need to return old values to avoid python freeing memory
@@ -266,18 +273,12 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
     if debug: print("freed image")
     return ret
 
-def detect_image(net, meta, im, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
-    #import cv2
-    #custom_image_bgr = cv2.imread(image) # use: detect(,,imagePath,)
-    #custom_image = cv2.cvtColor(custom_image_bgr, cv2.COLOR_BGR2RGB)
-    #custom_image = cv2.resize(custom_image,(lib.network_width(net), lib.network_height(net)), interpolation = cv2.INTER_LINEAR)
-    #import scipy.misc
-    #custom_image = scipy.misc.imread(image)
-    #im, arr = array_to_image(custom_image)		# you should comment line below: free_image(im)
+def detect_image(net, meta, im, size, thresh=.5, hier_thresh=.5, nms=.45, debug=False):
+    x_scale = float(size[1]) / network_width(net)
+    y_scale = float(size[0]) / network_height(net)
     num = c_int(0)
     pnum = pointer(num)
     predict_image(net, im)
-    #dets = get_network_boxes(net, custom_image_bgr.shape[1], custom_image_bgr.shape[0], thresh, hier_thresh, None, 0, pnum, 0) # OpenCV
     dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, None, 0, pnum, 0)
     num = pnum[0]
     if nms:
@@ -291,11 +292,9 @@ def detect_image(net, meta, im, thresh=.5, hier_thresh=.5, nms=.45, debug=False)
                     nameTag = meta.names[i]
                 else:
                     nameTag = altNames[i]
-                    # print("Got bbox", b)
-                    # print(nameTag)
-                    # print(dets[j].prob[i])
-                    # print((b.x, b.y, b.w, b.h))
-                res.append((nameTag, dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+                if nameTag in [b'car']:
+                    bbox = convert_back(b.x * x_scale, b.y * y_scale, b.w * x_scale, b.h * y_scale)
+                    res.append((nameTag, dets[j].prob[i], bbox))
 
     res = sorted(res, key=lambda x: -x[1])
     free_detections(dets, num)

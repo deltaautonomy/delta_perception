@@ -43,16 +43,16 @@ darknet.fix_coco_names_path(DARKNET_PATH)
 
 
 class YOLO:
-    def __init__(self, configPath=None, weightPath=None, metaPath=None, thresh=0.25):   
+    def __init__(self, configPath=None, weightPath=None, metaPath=None, thresh=0.35):   
         # YOLO parameters
         self.thresh = thresh
 
         # Set paths
-        if configPath is None: self.configPath = osp.join(DARKNET_PATH, 'cfg/yolov3.cfg')
+        if configPath is None: self.configPath = osp.join(DARKNET_PATH, 'cfg/yolov3-spp.cfg')
         if not osp.exists(self.configPath):
             raise ValueError('Invalid config path `' + osp.abspath(self.configPath) + '`')
 
-        if weightPath is None: self.weightPath = osp.join(DARKNET_PATH, 'weights/yolov3.weights')
+        if weightPath is None: self.weightPath = osp.join(DARKNET_PATH, 'weights/yolov3-spp.weights')
         if not osp.exists(self.weightPath):
             raise ValueError('Invalid weight path `' + osp.abspath(self.weightPath) + '`')
 
@@ -96,45 +96,30 @@ class YOLO:
         self.total = 0
 
     def run(self, frame):
-        self.prev_time = time.time()
-
         # Preprocess image
+        frame_size = frame.shape
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_resized = cv2.resize(frame_rgb, (darknet.network_width(self.netMain),
             darknet.network_height(self.netMain)), interpolation=cv2.INTER_LINEAR)
 
         # Forward pass
         darknet.copy_image_from_bytes(self.darknet_image, frame_resized.tobytes())
-        detections = darknet.detect_image(self.netMain, self.metaMain, self.darknet_image, thresh=self.thresh)
+        detections = darknet.detect_image(self.netMain, self.metaMain, self.darknet_image, frame_size, thresh=self.thresh)
 
-        self.total += time.time() - self.prev_time
-        self.count += 1
-        print('FPS:', self.count / self.total)
-  
-    @staticmethod    
-    def convertBack(x, y, w, h):
-        xmin = int(round(x - (w / 2)))
-        xmax = int(round(x + (w / 2)))
-        ymin = int(round(y - (h / 2)))
-        ymax = int(round(y + (h / 2)))
-        return xmin, ymin, xmax, ymax
+        return detections, frame_resized
 
     @staticmethod
     def cvDrawBoxes(detections, img):
         for detection in detections:
-            x, y, w, h = detection[2][0],\
-                detection[2][1],\
-                detection[2][2],\
-                detection[2][3]
-            xmin, ymin, xmax, ymax = YOLO.convertBack(
-                float(x), float(y), float(w), float(h))
-            pt1 = (xmin, ymin)
-            pt2 = (xmax, ymax)
-            cv2.rectangle(img, pt1, pt2, (0, 255, 0), 1)
+            xmin, ymin, xmax, ymax = detection[2][0],\
+                                     detection[2][1],\
+                                     detection[2][2],\
+                                     detection[2][3]
+            cv2.rectangle(img, (xmin, ymin), (xmax, ymax), (0, 255, 0), 1)
             cv2.putText(img,
                         detection[0].decode() +
-                        ' [' + str(round(detection[1] * 100, 2)) + ']',
-                        (pt1[0], pt1[1] - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        ' [' + str(round(detection[1] * 100, 2)) + '%]',
+                        (xmin, ymin - 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         [0, 255, 0], 2)
         return img
 

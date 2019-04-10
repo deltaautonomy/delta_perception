@@ -54,4 +54,4 @@ add_path(PKG_PATH)
 print('Package Path:', PKG_PATH)
 
 # Setup complete
-print('\n' + '*' * 30 + ' Delta Perception ' + '*' * 30 + '\n')
+print('\n\033[95m' + '*' * 30 + ' Delta Perception ' + '*' * 30 + '\033[00m\n')

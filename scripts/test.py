@@ -11,6 +11,8 @@ Date    : Apr 07, 2019
 # Handle paths and OpenCV import
 from init_paths import *
 
+########################### Darknet ###########################
+
 # Test packages
 from darknet.darknet_video import YOLO
 
@@ -28,6 +30,8 @@ def test_yolo():
             cap.release()
             break
         yolo.run(frame)
+
+########################### Driver ###########################
 
 if __name__ == '__main__':
     test_yolo()

@@ -42,7 +42,8 @@ cmap = plt.get_cmap('tab10')
 
 # Models
 yolov3 = YOLO()
-tracker = Sort(max_age=50, min_hits=1, use_dlib=True)
+# tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
+tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 
 # FPS loggers
 all_fps = FPSLogger('Pipeline')
@@ -73,6 +74,9 @@ def visualize(img, tracked_targets, detections):
 def perception_pipeline(img, image_pub, vis=True):
     # Log pipeline FPS
     all_fps.lap()
+
+    # Preprocess
+    img = increase_brightness(img)
 
     # Object detection
     yolo_fps.lap()
@@ -109,7 +113,7 @@ def callback(image_msg, camera_info, image_pub, **kwargs):
 
 def run(**kwargs):
     # Start node
-    rospy.init_node('delta_perception', anonymous=True)
+    rospy.init_node('main', anonymous=True)
     rospy.loginfo('Current PID: [%d]' % os.getpid())
     
     # Setup models
@@ -133,7 +137,7 @@ def run(**kwargs):
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
-        [image_sub, info_sub], queue_size=5, slop=0.2)
+        [image_sub, info_sub], queue_size=10, slop=0.1)
     ats.registerCallback(callback, image_pub, **kwargs)
 
     # Keep python from exiting until this node is stopped

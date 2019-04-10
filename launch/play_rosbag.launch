@@ -9,6 +9,6 @@
         type="play"
         name="player"
         output="screen"
-        args="--clock --loop --quiet $(arg filename)" />
+        args="--clock --loop --quiet --rate=2 $(arg filename)" />
 
 </launch>

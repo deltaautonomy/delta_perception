@@ -41,6 +41,7 @@ from derived_object_msgs.msg import Object, ObjectArray
 from utils import *
 from sort.sort import Sort
 from darknet.darknet_video import YOLO
+from validator.validator import ObjectDetectionValidator
 
 # Global objects
 cmap = plt.get_cmap('tab10')
@@ -55,6 +56,7 @@ VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 # yolov3 = YOLO()
 # tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
 # tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
+yolo_validator = ObjectDetectionValidator()
 
 # FPS loggers
 all_fps = FPSLogger('Pipeline')
@@ -71,7 +73,7 @@ def camera_info_callback(camera_info):
         CAMERA_INFO = camera_info
 
 
-def validator(image, objects, image_pub, **kwargs):
+def validate(image, objects, image_pub, **kwargs):
     # Check if camera info is available
     if CAMERA_INFO is None: return
 
@@ -100,6 +102,9 @@ def validator(image, objects, image_pub, **kwargs):
             # Find the 2D bounding box coordinates
             top_left = (np.min(bbox2D[:, 0]), np.min(bbox2D[:, 1]))
             bot_right = (np.max(bbox2D[:, 0]), np.max(bbox2D[:, 1]))
+            text = 'car %d %d %d %d %s\n' % (top_left[0], top_left[1], bot_right[0], bot_right[1],
+             'difficult' if bbox2D[0, 2] > 100 else '')
+            print(text)
 
             # Draw the rectangle
             cv2.rectangle(image, top_left, bot_right, (0, 255, 0), 1)
@@ -165,7 +170,7 @@ def perception_callback(image_msg, objects, image_pub, **kwargs):
 
     # Run the perception pipeline
     # perception_pipeline(img, image_pub)
-    validator(img, objects, image_pub)
+    validate(img, objects, image_pub)
 
 
 def run(**kwargs):
@@ -208,6 +213,7 @@ def run(**kwargs):
     try:
         rospy.spin()
     except rospy.ROSInterruptException:
+        yolo_validator.display_results()
         rospy.loginfo('Shutting down')
 
 

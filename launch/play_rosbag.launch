@@ -9,6 +9,14 @@
         type="play"
         name="player"
         output="screen"
-        args="--clock --loop --quiet --rate=2 $(arg filename)" />
+        args="--clock --loop --quiet --rate=1 $(arg filename)" />
+
+    <!-- Run the perception pipeline -->
+    <node   
+        pkg="delta_perception"
+        type="marker_array_publisher.py"
+        name="marker_array_publisher"
+        output="screen">
+    </node>
 
 </launch>

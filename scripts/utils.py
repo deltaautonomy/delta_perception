@@ -11,10 +11,13 @@ Date    : Apr 07, 2019
 # Handle paths and OpenCV import
 from init_paths import *
 
+# Built-in modules
+
 # ROS modules
 import rospy
 from cv_bridge import CvBridge, CvBridgeError
 from sensor_msgs.msg import Image, CameraInfo
+from tf.transformations import translation_matrix, quaternion_matrix, concatenate_matrices, euler_from_quaternion
 
 # Global variables
 CV_BRIDGE = CvBridge()
@@ -82,3 +85,46 @@ def increase_brightness(img, value=30):
     final_hsv = cv2.merge((h, s, v))
     img = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
     return img
+
+
+def get_bbox_vertices(pose, dims, scale=None):
+    '''
+    Returns:
+        vertices - 8 * [x, y, z, 1] ndarray
+    '''
+    if scale is not None: dims = [scale.x, scale.y, scale.z]
+    dx, dy, dz = dims[0] / 2.0, dims[1] / 2.0, dims[2]
+    vertices = [[dx, dy, 0, 1],
+                [dx, dy, dz, 1],
+                [dx, -dy, 0, 1],
+                [dx, -dy, dz, 1],
+                [-dx, dy, 0, 1],
+                [-dx, dy, dz, 1],
+                [-dx, -dy, 0, 1],
+                [-dx, -dy, dz, 1]]
+    vertices = np.matmul(pose, np.asarray(vertices).T).T
+    return vertices
+
+
+def position_to_numpy(position):
+    return np.asarray([position.x, position.y, position.z])
+
+
+def orientation_to_numpy(orientation):
+    return np.asarray([orientation.x, orientation.y, orientation.z, orientation.w])
+
+
+def orientation_to_rpy(orientation):
+    return euler_from_quaternion(orientation_to_numpy(quaternion))
+
+
+def quaternion_to_rpy(quaternion):
+    return euler_from_quaternion(quaternion)
+
+
+def pose_to_transformation(pose=None, position=None, orientation=None):
+    if position is None:
+        position = position_to_numpy(pose.position)
+    if orientation is None:
+        orientation = orientation_to_numpy(pose.orientation)
+    return concatenate_matrices(translation_matrix(position), quaternion_matrix(orientation))

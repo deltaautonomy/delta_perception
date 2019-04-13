@@ -12,6 +12,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   std_msgs
   sensor_msgs
+  visualization_msgs
   message_generation
   cv_bridge
   image_transport
@@ -53,6 +54,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## Generate messages in the 'msg' folder
 add_message_files(
   FILES
+  MarkerArrayStamped.msg
   VehicleGroundTruth.msg
   VehicleGroundTruthArray.msg
 )
@@ -76,6 +78,7 @@ generate_messages(
   DEPENDENCIES
   std_msgs
   sensor_msgs
+  visualization_msgs
 )
 
 ################################################
@@ -110,7 +113,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES delta_perception
-  CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs message_runtime
+  CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs visualization_msgs message_runtime
   # DEPENDS system_lib
 )
 

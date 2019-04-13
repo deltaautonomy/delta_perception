@@ -26,24 +26,35 @@ from init_paths import *
 import matplotlib.pyplot as plt
 
 # ROS modules
+import tf
 import rospy
 import message_filters
 from cv_bridge import CvBridge, CvBridgeError
+
+# ROS messages
 from sensor_msgs.msg import Image, CameraInfo
-from delta_perception.msg import VehicleGroundTruth, VehicleGroundTruthArray
+from visualization_msgs.msg import Marker
+from delta_perception.msg import MarkerArrayStamped
+from derived_object_msgs.msg import Object, ObjectArray
 
 # Local python modules
 from utils import *
 from sort.sort import Sort
 from darknet.darknet_video import YOLO
 
-# Global variables
+# Global objects
 cmap = plt.get_cmap('tab10')
+tf_listener = None
 
-# Models
-yolov3 = YOLO()
+# Global variables
+CAMERA_INFO = None
+CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
+VEHICLE_FRAME = 'vehicle/%03d/autopilot'
+
+# Perception models
+# yolov3 = YOLO()
 # tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
-tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
+# tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 
 # FPS loggers
 all_fps = FPSLogger('Pipeline')
@@ -54,7 +65,52 @@ sort_fps = FPSLogger('Tracker')
 ########################### Functions ###########################
 
 
-def visualize(img, tracked_targets, detections):
+def camera_info_callback(camera_info):
+    global CAMERA_INFO
+    if CAMERA_INFO is None:
+        CAMERA_INFO = camera_info
+
+
+def validator(image, objects, image_pub, **kwargs):
+    # Check if camera info is available
+    if CAMERA_INFO is None: return
+
+    for obj in objects.objects:
+        try:
+            # Find the camera to vehicle extrinsics
+            (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, VEHICLE_FRAME % obj.id, rospy.Time(0))
+            # print(trans, np.rad2deg(quaternion_to_rpy(rot)))
+            camera_to_vehicle = pose_to_transformation(position=trans, orientation=rot)
+
+            # Project 3D to 2D and filter bbox within image boundaries
+            M = np.matrix(CAMERA_INFO.P).reshape(3, 4)
+            bbox3D = get_bbox_vertices(camera_to_vehicle, obj.shape.dimensions)
+            bbox2D = np.matmul(M, bbox3D.T).T
+            
+            # Ignore vehicles behind the camera view
+            if bbox2D[0, 2] < 0: continue
+            bbox2D = bbox2D / bbox2D[:, -1]
+            bbox2D = bbox2D[:, :2].astype('int')#.tolist()
+
+            # Display the 3D bbox vertices on image
+            for point in bbox2D.tolist():
+                # print(point)
+                cv2.circle(image, tuple(point), 2, (255, 255, 0), -1)
+            
+            # Find the 2D bounding box coordinates
+            top_left = (np.min(bbox2D[:, 0]), np.min(bbox2D[:, 1]))
+            bot_right = (np.max(bbox2D[:, 0]), np.max(bbox2D[:, 1]))
+
+            # Draw the rectangle
+            cv2.rectangle(image, top_left, bot_right, (0, 255, 0), 1)
+            cv2.putText(image, 'ID: %d [%.2fm]' % (obj.id, trans[2]), top_left, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2_to_message(image, image_pub)
+
+        except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
+            print(e)
+
+
+def visualize(img, tracked_targets, detections, **kwargs):
     # Draw visualizations
     # img = YOLO.cvDrawBoxes(detections, img)
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -71,7 +127,7 @@ def visualize(img, tracked_targets, detections):
     return img
 
 
-def perception_pipeline(img, image_pub, vis=True):
+def perception_pipeline(img, image_pub, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
 
@@ -100,7 +156,7 @@ def perception_pipeline(img, image_pub, vis=True):
         cv2_to_message(img, image_pub)
 
 
-def callback(image_msg, camera_info, image_pub, **kwargs):
+def perception_callback(image_msg, objects, image_pub, **kwargs):
     # Read image message
     img = message_to_cv2(image_msg)
     if img is None:
@@ -108,21 +164,27 @@ def callback(image_msg, camera_info, image_pub, **kwargs):
         sys.exit(1)
 
     # Run the perception pipeline
-    perception_pipeline(img, image_pub)
+    # perception_pipeline(img, image_pub)
+    validator(img, objects, image_pub)
 
 
 def run(**kwargs):
+    global tf_listener
+
     # Start node
     rospy.init_node('main', anonymous=True)
     rospy.loginfo('Current PID: [%d]' % os.getpid())
+    tf_listener = tf.TransformListener()
     
     # Setup models
-    yolov3.setup()
+    # yolov3.setup()
 
     # Handle params and topics
-    camera_info = rospy.get_param('~camera_info_topic', '/carla/ego_vehicle/camera/rgb/front/camera_info')
-    image_color = rospy.get_param('~image_color_topic', '/carla/ego_vehicle/camera/rgb/front/image_color')
-    output_image = rospy.get_param('~output', '/delta_perception/output_image')
+    camera_info = rospy.get_param('~camera_info', '/carla/ego_vehicle/camera/rgb/front/camera_info')
+    image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
+    object_array = rospy.get_param('~object_array', '/carla/objects')
+    # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
+    output_image = rospy.get_param('~output_image', '/delta_perception/output_image')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
@@ -132,13 +194,15 @@ def run(**kwargs):
     image_pub = rospy.Publisher(output_image, Image, queue_size=5)
 
     # Subscribe to topics
-    info_sub = message_filters.Subscriber(camera_info, CameraInfo)
+    info_sub = rospy.Subscriber(camera_info, CameraInfo, camera_info_callback)
     image_sub = message_filters.Subscriber(image_color, Image)
+    object_sub = message_filters.Subscriber(object_array, ObjectArray)
+    # marker_sub = message_filters.Subscriber(vehicle_markers, MarkerArrayStamped)
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
-        [image_sub, info_sub], queue_size=10, slop=0.1)
-    ats.registerCallback(callback, image_pub, **kwargs)
+        [image_sub, object_sub], queue_size=1, slop=0.1)
+    ats.registerCallback(perception_callback, image_pub, **kwargs)
 
     # Keep python from exiting until this node is stopped
     try:

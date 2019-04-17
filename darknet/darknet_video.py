@@ -48,11 +48,11 @@ class YOLO:
         self.thresh = thresh
 
         # Set paths
-        if configPath is None: self.configPath = osp.join(DARKNET_PATH, 'cfg/yolov3-spp.cfg')
+        if configPath is None: self.configPath = osp.join(DARKNET_PATH, 'cfg/yolov3.cfg')
         if not osp.exists(self.configPath):
             raise ValueError('Invalid config path `' + osp.abspath(self.configPath) + '`')
 
-        if weightPath is None: self.weightPath = osp.join(DARKNET_PATH, 'weights/yolov3-spp.weights')
+        if weightPath is None: self.weightPath = osp.join(DARKNET_PATH, 'weights/yolov3.weights')
         if not osp.exists(self.weightPath):
             raise ValueError('Invalid weight path `' + osp.abspath(self.weightPath) + '`')
 

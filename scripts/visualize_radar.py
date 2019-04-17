@@ -54,14 +54,15 @@ def callback(image_msg, radar_msg, image_pub, **kwargs):
     # Project the radar points on image
     for track in radar_msg.tracks:
         if CAMERA_PROJECTION_MATRIX is not None:
-            pos = position_to_numpy(track.track_shape.points[0])
+            pos_msg = position_to_numpy(track.track_shape.points[0])
+            pos = np.asarray([pos_msg[1], -pos_msg[0], 0])
+            print(pos)
             pos = np.matrix(np.append(pos, 1)).T
-            print(CAMERA_PROJECTION_MATRIX)
             uv = np.matmul(CAMERA_PROJECTION_MATRIX, pos)
             uv = uv / uv[-1]
             uv = uv[:2].astype('int').tolist()
             uv = np.asarray(uv).flatten().tolist()
-            cv2.circle(img, tuple(uv), 10, (0, 255, 0), -1)
+            cv2.circle(img, tuple(uv), 10, (0, 0, 255), -1)
 
     # Display image
     cv2_to_message(img, image_pub)
@@ -76,8 +77,8 @@ def run(**kwargs):
     tf_listener = tf.TransformListener()
 
     # Find the camera to vehicle extrinsics
-    tf_listener.waitForTransform(EGO_VEHICLE_FRAME, CAMERA_FRAME, rospy.Time(), rospy.Duration(4.0))
-    (trans, rot) = tf_listener.lookupTransform(EGO_VEHICLE_FRAME, CAMERA_FRAME, rospy.Time(0))
+    tf_listener.waitForTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(), rospy.Duration(4.0))
+    (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(0))
     CAMERA_EXTRINSICS = pose_to_transformation(position=trans, orientation=rot)
 
     # Handle params and topics

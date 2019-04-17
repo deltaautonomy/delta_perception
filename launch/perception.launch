@@ -3,7 +3,7 @@
 
     <!-- Play rosbag record -->
     <include file="$(find delta_perception)/launch/play_rosbag.launch">
-        <arg name="filename" value="$(find delta_perception)/bags/portland-02.bag" />
+        <arg name="filename" value="$(find delta_perception)/bags/Carla_RADAR_Camera.bag" />
     </include>
 
     <!-- Run the perception pipeline -->

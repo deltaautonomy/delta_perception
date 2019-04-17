@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+
+    <!-- Play rosbag record -->
+    <include file="$(find delta_perception)/launch/play_rosbag.launch">
+        <arg name="filename" value="/mnt/data/Workspaces/perception_ws/src/delta_perception/bags/Carla_RADAR_Camera.bag" />
+    </include>
+
+    <!-- Run the visualizer -->
+    <node   
+        pkg="delta_perception"
+        type="visualize_radar.py"
+        name="visualize_radar"
+        output="screen">
+    </node>
+
+    <!-- Display output image -->
+    <node
+        name="image_view"
+        pkg="image_view"
+        type="image_view"
+        respawn="false"
+        output="screen">
+
+        <!-- Set the output topic -->
+        <remap from="image" to="/delta_perception/camera_radar_image" />
+    </node>
+
+</launch>

@@ -57,6 +57,7 @@ CAMERA_PROJECTION_MATRIX = None
 EGO_VEHICLE_FRAME = 'ego_vehicle'
 CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
 VEHICLE_FRAME = 'vehicle/%03d/autopilot'
+RADAR_FRAME = 'ego_vehicle/radar'
 
 # Perception models
 yolov3 = YOLO()
@@ -152,8 +153,7 @@ def get_radar_targets(radar_msg):
     uv_points = []
     for track in radar_msg.tracks:
         if CAMERA_PROJECTION_MATRIX is not None:
-            pos_msg = position_to_numpy(track.track_shape.points[0])
-            pos = np.asarray([pos_msg[1], -pos_msg[0], 0])
+            pos = position_to_numpy(track.track_shape.points[0])
             pos = np.matrix(np.append(pos, 1)).T
             uv = np.matmul(CAMERA_PROJECTION_MATRIX, pos)
             uv = uv / uv[-1]
@@ -230,8 +230,8 @@ def run(**kwargs):
     yolov3.setup()
 
     # Find the camera to vehicle extrinsics
-    tf_listener.waitForTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(), rospy.Duration(4.0))
-    (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(0))
+    tf_listener.waitForTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(), rospy.Duration(4.0))
+    (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(0))
     CAMERA_EXTRINSICS = pose_to_transformation(position=trans, orientation=rot)
 
     # Handle params and topics

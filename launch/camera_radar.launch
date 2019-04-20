@@ -2,9 +2,9 @@
 <launch>
 
     <!-- Play rosbag record -->
-    <include file="$(find delta_perception)/launch/play_rosbag.launch">
+    <!--include file="$(find delta_perception)/launch/play_rosbag.launch">
         <arg name="filename" value="/mnt/data/Workspaces/perception_ws/src/delta_perception/bags/Carla_RADAR_Camera.bag" />
-    </include>
+    </include-->
 
     <!-- Run the visualizer -->
     <node   

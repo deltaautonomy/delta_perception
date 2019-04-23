@@ -42,6 +42,7 @@ from derived_object_msgs.msg import Object, ObjectArray
 from utils import *
 from sort.sort import Sort
 from darknet.darknet_video import YOLO
+from lanenet.lanenet import LaneNetModel
 from validator.validator import ObjectDetectionValidator
 
 # Global objects
@@ -60,13 +61,16 @@ VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 
 # Perception models
 yolov3 = YOLO()
+lanenet = LaneNetModel()
 tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
 # tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 # yolo_validator = ObjectDetectionValidator()
 
 # FPS loggers
+FRAME_COUNT = 0
 all_fps = FPSLogger('Pipeline')
 yolo_fps = FPSLogger('YOLOv3')
+lane_fps = FPSLogger('LaneNet')
 sort_fps = FPSLogger('Tracker')
 fusion_fps = FPSLogger('Fusion')
 
@@ -81,13 +85,31 @@ def camera_info_callback(camera_info):
         CAMERA_PROJECTION_MATRIX = np.matmul(np.asarray(CAMERA_INFO.P).reshape(3, 4), CAMERA_EXTRINSICS)
 
 
-def validate(image, objects, image_pub, **kwargs):
+def validation_setup():
+    if not osp.exists(osp.join(PKG_PATH, 'results/detection-results')):
+        os.makedirs(osp.join(PKG_PATH, 'results/detection-results'))
+    if not osp.exists(osp.join(PKG_PATH, 'results/ground-truth')):
+        os.makedirs(osp.join(PKG_PATH, 'results/ground-truth'))
+
+
+def valid_bbox(top_left, bot_right, image_size):
+    h, w, c = image_size
+    if top_left[0] > 0 and top_left[1] > 0 and bot_right[0] > 0 and bot_right[1] > 0 \
+        and top_left[0] < w and top_left[1] < h and bot_right[0] < w and bot_right[1] < h:
+        return True
+    return False
+
+
+def validate(image, objects, detections, image_pub, **kwargs):
+    global FRAME_COUNT
+    FRAME_COUNT += 1
+
     # Check if camera info is available
     if CAMERA_INFO is None: return
 
+    gt_detects = []
     for obj in objects.objects:
         try:
-            # if obj.id != 2: continue
             # Find the camera to vehicle extrinsics
             (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, VEHICLE_FRAME % obj.id, rospy.Time(0))
             # print(trans, np.rad2deg(quaternion_to_rpy(rot)))
@@ -97,35 +119,47 @@ def validate(image, objects, image_pub, **kwargs):
             M = np.matrix(CAMERA_INFO.P).reshape(3, 4)
             bbox3D = get_bbox_vertices(camera_to_vehicle, obj.shape.dimensions)
             bbox2D = np.matmul(M, bbox3D.T).T
-            # print(np.mean(bbox3D, axis=0))
-            
+
             # Ignore vehicles behind the camera view
             if bbox2D[0, 2] < 0: continue
             bbox2D = bbox2D / bbox2D[:, -1]
-            bbox2D = bbox2D[:, :2].astype('int')#.tolist()
+            bbox2D = bbox2D[:, :2].astype('int')
 
             # Display the 3D bbox vertices on image
-            for point in bbox2D.tolist():
-                cv2.circle(image, tuple(point), 2, (255, 255, 0), -1)
+            # for point in bbox2D.tolist():
+            #     cv2.circle(image, tuple(point), 2, (255, 255, 0), -1)
 
             # Find the 2D bounding box coordinates
             top_left = (np.min(bbox2D[:, 0]), np.min(bbox2D[:, 1]))
             bot_right = (np.max(bbox2D[:, 0]), np.max(bbox2D[:, 1]))
-            # TODO: Fix this
-            # text = 'car %d %d %d %d %s\n' % (top_left[0], top_left[1], bot_right[0], bot_right[1],
-            #  'difficult' if bbox2D[0, 2] > 100 else '')
-            # print(text)
 
-            # Draw the rectangle
-            cv2.rectangle(image, top_left, bot_right, (0, 255, 0), 1)
-            cv2.putText(image, 'ID: %d [%.2fm]' % (obj.id, trans[2]), top_left, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-            cv2_to_message(image, image_pub)
+            # Save ground truth data
+            if trans[2] < 120 and valid_bbox(top_left, bot_right, image.shape):
+                text = 'car %d %d %d %d %s\n' % (top_left[0], top_left[1], bot_right[0], bot_right[1],
+                    'difficult' if (trans[2] < 2 or trans[2] > 80) else '')
+                gt_detects.append(text)
+
+                # Draw the rectangle
+                cv2.rectangle(image, top_left, bot_right, (0, 255, 0), 1)
+                cv2.putText(image, 'ID: %d [%.2fm]' % (obj.id, trans[2]), top_left, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                cv2_to_message(image, image_pub)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
-            print(e)
+            print('Exception', e)
+
+    with open(osp.join(PKG_PATH, 'results/ground-truth/frame_%05d.txt' % FRAME_COUNT), 'w') as f:
+        for text in gt_detects: f.write(text)
+
+    with open(osp.join(PKG_PATH, 'results/detection-results/frame_%05d.txt' % FRAME_COUNT), 'w') as f:
+        for detection in detections:
+            label = detection[0]
+            confidence = detection[1]
+            xmin, ymin, xmax, ymax = detection[2]
+            text = '%s %.5f %d %d %d %d\n' % (label, confidence, xmin, ymin, xmax, ymax)
+            f.write(text)
 
 
-def visualize(img, tracked_targets, detections, radar_targets, **kwargs):
+def visualize(img, lane_img, tracked_targets, detections, radar_targets=None, **kwargs):
     # Draw visualizations
     # img = YOLO.cvDrawBoxes(detections, img)
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -140,9 +174,13 @@ def visualize(img, tracked_targets, detections, radar_targets, **kwargs):
             (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 3)
 
     # Project the radar points on the image
-    for uv in radar_targets:
-        uv = np.asarray(uv).flatten().tolist()
-        cv2.circle(img, tuple(uv), 7, (0, 0, 255), 2)
+    # for uv in radar_targets:
+    #     uv = np.asarray(uv).flatten().tolist()
+    #     cv2.circle(img, tuple(uv), 7, (0, 0, 255), 2)
+
+    # Display lane markings
+    overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
+    img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
 
     return img
 
@@ -164,15 +202,16 @@ def get_radar_targets(radar_msg):
 
 def sensor_fusion(dets, tracked_targets, radar_targets):
     # TODO: Implement this
+    time.sleep(0.005)
     return None
 
 
-def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
+def perception_pipeline(img, image_pub, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
 
     # Preprocess
-    img = increase_brightness(img)
+    # img = increase_brightness(img)
 
     # Object detection
     yolo_fps.lap()
@@ -185,8 +224,14 @@ def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
     tracked_targets = tracker.update(dets, img)
     sort_fps.tick()
 
+    # Lane detection
+    lane_fps.lap()
+    lane_img, lanes = lanenet.run(img)
+    lane_fps.tick()
+
     # RADAR tracking
-    radar_targets = get_radar_targets(radar_msg)
+    # radar_targets = get_radar_targets(radar_msg)
+    radar_targets = None
 
     # Sensor fusion
     fusion_fps.lap()
@@ -195,16 +240,19 @@ def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
 
     # Display FPS logger status
     all_fps.tick()
-    sys.stdout.write('\r%s | %s | %s | %ss ' % (all_fps.get_log(), yolo_fps.get_log(), sort_fps.get_log(), fusion_fps.get_log()))
-    sys.stdout.flush()
+    # sys.stdout.write('\r%s | %s | %s | %s | %s ' % (all_fps.get_log(), yolo_fps.get_log(),
+    #     lane_fps.get_log(), sort_fps.get_log(), fusion_fps.get_log()))
+    # sys.stdout.flush()
 
     # Visualize and publish image message
     if vis:
-        img = visualize(img.copy(), tracked_targets, detections, radar_targets)
+        img = visualize(img, lane_img, tracked_targets, detections)
         cv2_to_message(img, image_pub)
 
+    return detections, lanes
 
-def perception_callback(image_msg, radar_msg, objects, image_pub, **kwargs):
+
+def perception_callback(image_msg, objects, image_pub, **kwargs):
     # Read image message
     img = message_to_cv2(image_msg)
     if img is None:
@@ -212,10 +260,16 @@ def perception_callback(image_msg, radar_msg, objects, image_pub, **kwargs):
         sys.exit(1)
 
     # Run the perception pipeline
-    perception_pipeline(img, radar_msg, image_pub)
+    detections, lanes = perception_pipeline(img, image_pub)
 
     # Run the validation pipeline (Not implemented)
-    # validate(img, objects, image_pub)
+    # validate(img, objects, detections, image_pub)
+
+
+def shutdown_hook():
+    print('\n\033[95m' + '*' * 30 + ' Delta Perception Shutdown ' + '*' * 30 + '\033[00m\n')
+    lanenet.close()
+    # yolo_validator.display_results()
 
 
 def run(**kwargs):
@@ -225,12 +279,16 @@ def run(**kwargs):
     rospy.init_node('main', anonymous=True)
     rospy.loginfo('Current PID: [%d]' % os.getpid())
     tf_listener = tf.TransformListener()
+
+    # Setup validation
+    validation_setup()
     
     # Setup models
     yolov3.setup()
+    lanenet.setup()
 
     # Find the camera to vehicle extrinsics
-    tf_listener.waitForTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(), rospy.Duration(4.0))
+    tf_listener.waitForTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(), rospy.Duration(60.0))
     (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(0))
     CAMERA_EXTRINSICS = pose_to_transformation(position=trans, orientation=rot)
 
@@ -247,7 +305,7 @@ def run(**kwargs):
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('RADAR topic: %s' % radar)
 
-     # Publish output topic
+    # Publish output topic
     image_pub = rospy.Publisher(output_image, Image, queue_size=5)
 
     # Subscribe to topics
@@ -259,14 +317,16 @@ def run(**kwargs):
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
-        [image_sub, radar_sub, object_sub], queue_size=1, slop=0.1)
+        [image_sub, object_sub], queue_size=1, slop=0.1)
     ats.registerCallback(perception_callback, image_pub, **kwargs)
+
+    # Shutdown hook
+    rospy.on_shutdown(shutdown_hook)
 
     # Keep python from exiting until this node is stopped
     try:
         rospy.spin()
     except rospy.ROSInterruptException:
-        # yolo_validator.display_results()
         rospy.loginfo('Shutting down')
 
 

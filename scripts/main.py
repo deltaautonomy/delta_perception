@@ -42,10 +42,10 @@ from derived_object_msgs.msg import Object, ObjectArray
 from utils import *
 from sort.sort import Sort
 from darknet.darknet_video import YOLO
-from lanenet.lanenet import LaneNetModel
-from validator.validator import ObjectDetectionValidator
+from validator.calculate_map import calculate_map
 
 # Global objects
+STOP_FLAG = False
 cmap = plt.get_cmap('tab10')
 tf_listener = None
 
@@ -55,13 +55,13 @@ CAMERA_EXTRINSICS = None
 CAMERA_PROJECTION_MATRIX = None
 
 # Frames
+RADAR_FRAME = '/ego_vehicle/radar'
 EGO_VEHICLE_FRAME = 'ego_vehicle'
 CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
 VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 
 # Perception models
 yolov3 = YOLO()
-lanenet = LaneNetModel()
 tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
 # tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 # yolo_validator = ObjectDetectionValidator()
@@ -70,7 +70,6 @@ tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
 FRAME_COUNT = 0
 all_fps = FPSLogger('Pipeline')
 yolo_fps = FPSLogger('YOLOv3')
-lane_fps = FPSLogger('LaneNet')
 sort_fps = FPSLogger('Tracker')
 fusion_fps = FPSLogger('Fusion')
 
@@ -86,10 +85,20 @@ def camera_info_callback(camera_info):
 
 
 def validation_setup():
-    if not osp.exists(osp.join(PKG_PATH, 'results/detection-results')):
-        os.makedirs(osp.join(PKG_PATH, 'results/detection-results'))
-    if not osp.exists(osp.join(PKG_PATH, 'results/ground-truth')):
-        os.makedirs(osp.join(PKG_PATH, 'results/ground-truth'))
+    # Detection results path
+    if osp.exists(osp.join(PKG_PATH, 'results/detection-results')):
+        shutil.rmtree(osp.join(PKG_PATH,'results/detection-results'), ignore_errors=True)
+    os.makedirs(osp.join(PKG_PATH, 'results/detection-results'))
+
+    # Ground thruth results path
+    if osp.exists(osp.join(PKG_PATH, 'results/ground-truth')):
+        shutil.rmtree(osp.join(PKG_PATH,'results/ground-truth'), ignore_errors=True)
+    os.makedirs(osp.join(PKG_PATH, 'results/ground-truth'))
+
+    # Image directory
+    if osp.exists(osp.join(PKG_PATH, 'results/images-optional')):
+        shutil.rmtree(osp.join(PKG_PATH,'results/images-optional'), ignore_errors=True)
+    os.makedirs(osp.join(PKG_PATH, 'results/images-optional'))
 
 
 def valid_bbox(top_left, bot_right, image_size):
@@ -134,22 +143,27 @@ def validate(image, objects, detections, image_pub, **kwargs):
             bot_right = (np.max(bbox2D[:, 0]), np.max(bbox2D[:, 1]))
 
             # Save ground truth data
-            if trans[2] < 120 and valid_bbox(top_left, bot_right, image.shape):
+            if trans[2] < 100 and valid_bbox(top_left, bot_right, image.shape):
                 text = 'car %d %d %d %d %s\n' % (top_left[0], top_left[1], bot_right[0], bot_right[1],
-                    'difficult' if (trans[2] < 2 or trans[2] > 80) else '')
+                    'difficult' if (trans[2] < 2 or trans[2] > 60) else '')
                 gt_detects.append(text)
 
                 # Draw the rectangle
-                cv2.rectangle(image, top_left, bot_right, (0, 255, 0), 1)
-                cv2.putText(image, 'ID: %d [%.2fm]' % (obj.id, trans[2]), top_left, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                cv2_to_message(image, image_pub)
+                # cv2.rectangle(image, top_left, bot_right, (0, 255, 0), 1)
+                # cv2.putText(image, 'ID: %d [%.2fm]' % (obj.id, trans[2]), top_left, cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                # cv2_to_message(image, image_pub)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
             print('Exception', e)
 
+    # Save image
+    # cv2.imwrite(osp.join(PKG_PATH, 'results/images-optional', 'frame_%05d.jpg' % FRAME_COUNT), image)
+    
+    # Save ground truth
     with open(osp.join(PKG_PATH, 'results/ground-truth/frame_%05d.txt' % FRAME_COUNT), 'w') as f:
         for text in gt_detects: f.write(text)
 
+    # Save detected results
     with open(osp.join(PKG_PATH, 'results/detection-results/frame_%05d.txt' % FRAME_COUNT), 'w') as f:
         for detection in detections:
             label = detection[0]
@@ -159,7 +173,7 @@ def validate(image, objects, detections, image_pub, **kwargs):
             f.write(text)
 
 
-def visualize(img, lane_img, tracked_targets, detections, radar_targets=None, **kwargs):
+def visualize(img, tracked_targets, detections, radar_targets, **kwargs):
     # Draw visualizations
     # img = YOLO.cvDrawBoxes(detections, img)
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -174,13 +188,13 @@ def visualize(img, lane_img, tracked_targets, detections, radar_targets=None, **
             (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 3)
 
     # Project the radar points on the image
-    # for uv in radar_targets:
-    #     uv = np.asarray(uv).flatten().tolist()
-    #     cv2.circle(img, tuple(uv), 7, (0, 0, 255), 2)
-
-    # Display lane markings
-    overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
-    img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
+    for tid, uv, dist, vel in radar_targets:
+        uv = np.asarray(uv).flatten().tolist()
+        cv2.circle(img, tuple(uv), 10, (0, 0, 255), 3)
+        cv2.putText(img, '[P: %.2fm]' % (dist), 
+            tuple(uv), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
+        cv2.putText(img, '[V: %.2fKm/h]' % (vel * 3.6), 
+            (uv[0], uv[1] + 15), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
 
     return img
 
@@ -191,12 +205,12 @@ def get_radar_targets(radar_msg):
     for track in radar_msg.tracks:
         if CAMERA_PROJECTION_MATRIX is not None:
             pos_msg = position_to_numpy(track.track_shape.points[0])
-            pos = np.asarray([pos_msg[1], -pos_msg[0], 0])
+            pos = np.asarray([pos_msg[0], pos_msg[1], pos_msg[2]])
             pos = np.matrix(np.append(pos, 1)).T
             uv = np.matmul(CAMERA_PROJECTION_MATRIX, pos)
             uv = uv / uv[-1]
             uv = uv[:2].astype('int').tolist()
-            uv_points.append(uv)
+            uv_points.append((track.track_id, uv, pos[0], track.linear_velocity.x))
     return uv_points
 
 
@@ -206,7 +220,7 @@ def sensor_fusion(dets, tracked_targets, radar_targets):
     return None
 
 
-def perception_pipeline(img, image_pub, vis=True, **kwargs):
+def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
 
@@ -224,35 +238,31 @@ def perception_pipeline(img, image_pub, vis=True, **kwargs):
     tracked_targets = tracker.update(dets, img)
     sort_fps.tick()
 
-    # Lane detection
-    lane_fps.lap()
-    lane_img, lanes = lanenet.run(img)
-    lane_fps.tick()
-
     # RADAR tracking
-    # radar_targets = get_radar_targets(radar_msg)
-    radar_targets = None
+    radar_targets = get_radar_targets(radar_msg)
 
     # Sensor fusion
-    fusion_fps.lap()
-    ret = sensor_fusion(dets, tracked_targets, radar_targets)
-    fusion_fps.tick()
+    # fusion_fps.lap()
+    # ret = sensor_fusion(dets, tracked_targets, radar_targets)
+    # fusion_fps.tick()
 
     # Display FPS logger status
     all_fps.tick()
-    # sys.stdout.write('\r%s | %s | %s | %s | %s ' % (all_fps.get_log(), yolo_fps.get_log(),
-    #     lane_fps.get_log(), sort_fps.get_log(), fusion_fps.get_log()))
-    # sys.stdout.flush()
+    sys.stdout.write('\r%s | %s | %s ' % (all_fps.get_log(), yolo_fps.get_log(), sort_fps.get_log()))
+    sys.stdout.flush()
 
     # Visualize and publish image message
     if vis:
-        img = visualize(img, lane_img, tracked_targets, detections)
+        img = visualize(img, tracked_targets, detections, radar_targets)
         cv2_to_message(img, image_pub)
 
-    return detections, lanes
+    return detections
 
 
-def perception_callback(image_msg, objects, image_pub, **kwargs):
+def perception_callback(image_msg, radar_msg, objects, image_pub, **kwargs):
+    # Node stop has been requested
+    if STOP_FLAG: return
+
     # Read image message
     img = message_to_cv2(image_msg)
     if img is None:
@@ -260,16 +270,20 @@ def perception_callback(image_msg, objects, image_pub, **kwargs):
         sys.exit(1)
 
     # Run the perception pipeline
-    detections, lanes = perception_pipeline(img, image_pub)
+    detections = perception_pipeline(img.copy(), radar_msg, image_pub)
 
-    # Run the validation pipeline (Not implemented)
-    # validate(img, objects, detections, image_pub)
+    # Run the validation pipeline
+    validate(img.copy(), objects, detections, image_pub)
 
 
 def shutdown_hook():
+    global STOP_FLAG
+    STOP_FLAG = True
+    time.sleep(3)
     print('\n\033[95m' + '*' * 30 + ' Delta Perception Shutdown ' + '*' * 30 + '\033[00m\n')
-    lanenet.close()
-    # yolo_validator.display_results()
+    print('\n\033[95m' + '*' * 30 + ' Calculating YOLOv3 mAP ' + '*' * 30 + '\033[00m\n')
+    print('YOLOv3 Mean Average Precision @ 0.5 Overlap: %.3f%%\n' % (calculate_map(0.5) * 100))
+    # print('YOLOv3 Mean Average Precision @ 0.7 Overlap: %.3f%%\n' % (calculate_map(0.7) * 100))
 
 
 def run(**kwargs):
@@ -285,11 +299,10 @@ def run(**kwargs):
     
     # Setup models
     yolov3.setup()
-    lanenet.setup()
 
     # Find the camera to vehicle extrinsics
-    tf_listener.waitForTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(), rospy.Duration(60.0))
-    (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, EGO_VEHICLE_FRAME, rospy.Time(0))
+    tf_listener.waitForTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(), rospy.Duration(100.0))
+    (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(0))
     CAMERA_EXTRINSICS = pose_to_transformation(position=trans, orientation=rot)
 
     # Handle params and topics
@@ -298,7 +311,7 @@ def run(**kwargs):
     object_array = rospy.get_param('~object_array', '/carla/objects')
     # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
     radar = rospy.get_param('~radar', '/delta/radar/tracks')
-    output_image = rospy.get_param('~output_image', '/delta_perception/output_image')
+    output_image = rospy.get_param('~output_image', '/delta_perception/object_detection_tracking')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
@@ -317,7 +330,7 @@ def run(**kwargs):
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
-        [image_sub, object_sub], queue_size=1, slop=0.1)
+        [image_sub, radar_sub, object_sub], queue_size=1, slop=0.5)
     ats.registerCallback(perception_callback, image_pub, **kwargs)
 
     # Shutdown hook

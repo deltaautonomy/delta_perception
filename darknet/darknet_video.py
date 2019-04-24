@@ -43,7 +43,7 @@ darknet.fix_coco_names_path(DARKNET_PATH)
 
 
 class YOLO:
-    def __init__(self, configPath=None, weightPath=None, metaPath=None, thresh=0.35):   
+    def __init__(self, configPath=None, weightPath=None, metaPath=None, thresh=0.25):   
         # YOLO parameters
         self.thresh = thresh
 

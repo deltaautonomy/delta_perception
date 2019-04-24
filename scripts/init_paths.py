@@ -43,6 +43,7 @@ import math
 import time
 import pickle
 import random
+import shutil
 import numpy as np
 
 # Handle paths

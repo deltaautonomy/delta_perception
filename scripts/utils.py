@@ -67,6 +67,8 @@ def message_to_cv2(msg):
 
 def cv2_to_message(img, topic):
     # Publish image using CV bridge
+    if len(img.shape) == 2:
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     try:
         topic.publish(CV_BRIDGE.cv2_to_imgmsg(img, "bgr8"))
     except CvBridgeError as e: 

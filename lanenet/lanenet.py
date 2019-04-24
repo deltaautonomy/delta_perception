@@ -27,6 +27,11 @@ else:
 # External modules
 import tensorflow as tf
 
+# Set environment variables
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# import logging
+# tf.get_logger().setLevel(logging.ERROR)
+
 # Local python modules
 from lanenet.lanenet_model import lanenet_cluster
 from lanenet.lanenet_model import lanenet_merge_model
@@ -49,7 +54,9 @@ class LaneNetModel:
         self.cluster = lanenet_cluster.LaneNetCluster()
         self.postprocessor = lanenet_postprocess.LaneNetPoseProcessor()
         self.saver = tf.train.Saver()
-        self.sess_config = tf.ConfigProto(device_count={'GPU': 1})
+        self.sess_config = tf.ConfigProto()
+        self.sess_config.gpu_options.allow_growth = True
+        # device_count={'GPU': 1})
         self.sess = tf.Session(config=self.sess_config)
 
         # Load weights

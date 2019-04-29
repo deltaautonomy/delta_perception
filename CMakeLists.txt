@@ -57,6 +57,8 @@ add_message_files(
   MarkerArrayStamped.msg
   VehicleGroundTruth.msg
   VehicleGroundTruthArray.msg
+  LaneMarking.msg
+  LaneMarkingArray.msg
 )
 
 ## Generate services in the 'srv' folder

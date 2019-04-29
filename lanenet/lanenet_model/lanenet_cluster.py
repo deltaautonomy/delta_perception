@@ -207,7 +207,8 @@ class LaneNetCluster(object):
         # Output data for validation
         slope_list = []
         intercept_list = []
-        points_list = []
+        detected_points = []
+        validation_points = []
 
         # Line fitting on 3 lanes
         lanes_count = 0
@@ -269,8 +270,8 @@ class LaneNetCluster(object):
         # Draw the lanes
         if len(self.slope_history_first):
             # validation heights
-            val_y1 = 125
-            val_y2 = 90
+            val_y1 = 135
+            val_y2 = 80
 
             # Lane 1
             y1 = int(height) # starting point of the lanes
@@ -279,7 +280,8 @@ class LaneNetCluster(object):
             x2 = int((y2 - intercept_first)/slope_first)
             val_x1 = int((val_y1 - intercept_first)/slope_first)
             val_x2 = int((val_y2 - intercept_first)/slope_first)
-            points_list.append([val_x1, val_y1, val_x2, val_y2])
+            detected_points.append([x1, y1, x2, y2])
+            validation_points.append([val_x1, val_y1, val_x2, val_y2])
             # cv2.circle(mask_image,(val_x1, val_y1), 6, (0, 0, 255), -1)
             # cv2.circle(mask_image,(val_x2, val_y2), 6, (255, 255, 0), -1)
             cv2.line(mask_image, (x1, y1), (x2, y2), (255, 0, 0), 2)
@@ -291,7 +293,8 @@ class LaneNetCluster(object):
             x2 = int((y2 - intercept_second)/slope_second)
             val_x1 = int((val_y1 - intercept_second)/slope_second)
             val_x2 = int((val_y2 - intercept_second)/slope_second)
-            points_list.append([val_x1, val_y1, val_x2, val_y2])
+            detected_points.append([x1, y1, x2, y2])
+            validation_points.append([val_x1, val_y1, val_x2, val_y2])
             # cv2.circle(mask_image,(val_x1, val_y1), 4, (0, 255, 0), -1)
             # cv2.circle(mask_image,(val_x2, val_y2), 4, (255, 0, 255), -1)
             cv2.line(mask_image, (x1, y1), (x2, y2), (0, 255, 0), 2)
@@ -303,12 +306,13 @@ class LaneNetCluster(object):
             x2 = int((y2 - intercept_third)/slope_third)
             val_x1 = int((val_y1 - intercept_third)/slope_third)
             val_x2 = int((val_y2 - intercept_third)/slope_third)
-            points_list.append([val_x1, val_y1, val_x2, val_y2])
+            detected_points.append([x1, y1, x2, y2])
+            validation_points.append([val_x1, val_y1, val_x2, val_y2])
             # cv2.circle(mask_image,(val_x1, val_y1), 2, (255, 0, 0), -1)
             # cv2.circle(mask_image,(val_x2, val_y2), 2, (0, 255, 255), -1)
             cv2.line(mask_image, (x1, y1), (x2, y2), (0, 0, 255), 2)
 
-        return mask_image, np.asarray(points_list[::-1])
+        return mask_image, np.asarray(detected_points[::-1]), np.asarray(validation_points[::-1])
 
 
 if __name__ == '__main__':

@@ -20,8 +20,6 @@ from __future__ import print_function, absolute_import, division
 # Handle paths and OpenCV import
 from init_paths import *
 
-# Built-in modules
-
 # External modules
 import matplotlib.pyplot as plt
 
@@ -33,14 +31,14 @@ from cv_bridge import CvBridge, CvBridgeError
 
 # ROS messages
 from sensor_msgs.msg import Image
+from delta_perception.msg import LaneMarking, LaneMarkingArray
 
 # Local python modules
 from utils import *
 from lanenet.lanenet import LaneNetModel
 
-# Global objects
-cmap = plt.get_cmap('tab10')
-VALIDATE = False
+# Frames
+CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
 
 # Perception models
 lanenet = LaneNetModel()
@@ -53,26 +51,51 @@ lane_fps = FPSLogger('LaneNet')
 ########################### Functions ###########################
 
 
-def lane_validation(img, image_gt_msg, lanes, image_pub, **kwargs):
-    pass
+def lane_detection(image_msg, image_pub, lane_pub, vis=True, **kwargs):
+    # Read image message
+    img = message_to_cv2(image_msg)
+    if img is None: return
 
-
-def lane_detection(img, image_pub, vis=True, **kwargs):
     # Preprocess
     # img = increase_brightness(img)
 
     # Lane detection
     lane_fps.lap()
     try:
-        lane_img, lanes = lanenet.run(img)
+        lane_img, points, _ = lanenet.run(img)
     except Exception as e:
+        print(e)
         return
     lane_fps.tick()
 
-    # Display FPS logger status
-    # sys.stdout.write('\r%s | %s | %s | %s | %s ' % (all_fps.get_log(), yolo_fps.get_log(),
-    #     lane_fps.get_log(), sort_fps.get_log(), fusion_fps.get_log()))
-    # sys.stdout.flush()
+    # Run lane detection
+    if len(points) < 3:
+        print('Less than 3 lanes in detected lanes visible')
+        return
+
+    # Fit lines on contours
+    rows, cols = img.shape[:2]
+    fy = img.shape[0] / float(lane_img.shape[0])
+    fx = img.shape[1] / float(lane_img.shape[1])
+
+    # Scale predicted points
+    points[:, 0] = points[:, 0] * fx
+    points[:, 1] = points[:, 1] * fy
+    points[:, 2] = points[:, 2] * fx
+    points[:, 3] = points[:, 3] * fy
+
+    # Convert to lane marking array
+    lane_array = LaneMarkingArray()
+    lane_array.header.stamp = image_msg.header.stamp
+    lane_array.header.frame_id = CAMERA_FRAME
+    for xbot, ybot, xtop, ytop in points:
+        lane = LaneMarking()
+        lane.xtop, lane.ytop = xtop, ytop
+        lane.xbot, lane.ybot = xbot, ybot
+        lane_array.lanes.append(lane)
+
+    # Publish the lane data
+    lane_pub.publish(lane_array)
 
     # Visualize and publish image message
     if vis:
@@ -81,23 +104,15 @@ def lane_detection(img, image_pub, vis=True, **kwargs):
         img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
         cv2_to_message(img, image_pub)
 
-    return lanes
 
-
-def callback(image_msg, image_pub, **kwargs):
-    # Read image message
-    img = message_to_cv2(image_msg)
-    if img is None: return
-
+def callback(image_msg, image_pub, lane_pub, **kwargs):
     # Run the perception pipeline
-    lanes = lane_detection(img, image_pub)
+    lane_detection(image_msg, image_pub, lane_pub)
 
 
 def shutdown_hook():
     print('\n\033[95m' + '*' * 30 + ' Lane Detection Shutdown ' + '*' * 30 + '\033[00m\n')
     lanenet.close()
-    if VALIDATE:
-        pass
 
 
 def run(**kwargs):
@@ -113,13 +128,16 @@ def run(**kwargs):
 
     # Handle params and topics
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
-    # if VALIDATE: image_gt = rospy.get_param('~image_gt', '/carla/ego_vehicle/camera/semantic_segmentation/front/image_segmentation')
-    output_image = rospy.get_param('~output_image', '/delta_perception/lane_detection')
+    lane_output = rospy.get_param('~lane_output', '/delta/perception/lane/markings')
+    output_image = rospy.get_param('~output_image', '/delta/perception/lane/image')
 
     # Display params and topics
     rospy.loginfo('Image topic: %s' % image_color)
+    rospy.loginfo('Lane marking topic: %s' % lane_output)
+    rospy.loginfo('Output topic: %s' % output_image)
 
     # Publish output topic
+    lane_pub = rospy.Publisher(lane_output, LaneMarkingArray, queue_size=5)
     image_pub = rospy.Publisher(output_image, Image, queue_size=5)
 
     # Subscribe to topics
@@ -127,7 +145,7 @@ def run(**kwargs):
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer([image_sub], queue_size=1, slop=0.1)
-    ats.registerCallback(callback, image_pub, **kwargs)
+    ats.registerCallback(callback, image_pub, lane_pub, **kwargs)
 
     # Shutdown hook
     rospy.on_shutdown(shutdown_hook)

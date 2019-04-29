@@ -89,7 +89,7 @@ def perception_callback(image_msg, image_gt_msg, image_pub, **kwargs):
     contours = [contours[arg] for arg in args[:3]]
     
     # Run lane detection
-    lane_img, points = lanenet.run(img)
+    lane_img, _, points = lanenet.run(img)
     if len(points) < 3:
         print('Less than 3 lanes in detected lanes visible')
         return

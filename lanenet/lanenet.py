@@ -72,10 +72,10 @@ class LaneNetModel:
 
             self.binary_seg_image[0] = self.postprocessor.postprocess(self.binary_seg_image[0])
 
-            self.mask_image, self.point_list = self.cluster.get_lane_mask(self.binary_seg_image[0],
+            self.mask_image, self.point_list, self.valid_list = self.cluster.get_lane_mask(self.binary_seg_image[0],
                 self.instance_seg_image[0])
 
-        return self.mask_image, self.point_list
+        return self.mask_image, self.point_list, self.valid_list
 
     def preprocess(self, img):
         image = cv2.resize(img, (512, 256), interpolation=cv2.INTER_LINEAR)

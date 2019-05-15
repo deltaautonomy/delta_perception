@@ -311,7 +311,7 @@ def run(**kwargs):
     object_array = rospy.get_param('~object_array', '/carla/objects')
     # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
     radar = rospy.get_param('~radar', '/delta/radar/tracks')
-    output_image = rospy.get_param('~output_image', '/delta_perception/object_detection_tracking')
+    output_image = rospy.get_param('~output_image', '/delta/perception/object_detection_tracking/image')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)

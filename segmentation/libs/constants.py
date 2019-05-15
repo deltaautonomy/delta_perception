@@ -26,7 +26,7 @@ CITYSCAPES_LABEL_COLORS = [
 # modified for detecting only the roads
 
 CITYSCAPES_LABEL_COLORS = [
-    (255, 255, 255),            # road
+    (128,  64, 128),        # road
     (0, 0, 0),              # sidewalk
     (0, 0, 0),              # building
     (0, 0, 0),              # wall

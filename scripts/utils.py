@@ -11,7 +11,8 @@ Date    : Apr 07, 2019
 # Handle paths and OpenCV import
 from init_paths import *
 
-# Built-in modules
+# External modules
+import PIL.Image
 
 # ROS modules
 import rospy
@@ -52,6 +53,14 @@ class FPSLogger:
     def get_log(self, tick=False):
         if tick: self.tick()
         return '\033[94m %s FPS:\033[00m \033[93m%.1f\033[00m' % (self.name, self.fps)
+
+
+def pil_image(img):
+    return PIL.Image.fromarray(img)
+
+
+def cv_image(img):
+    return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 
 def message_to_cv2(msg):

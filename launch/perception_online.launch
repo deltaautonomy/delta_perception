@@ -3,7 +3,7 @@
 
     <!-- Play rosbag record -->
     <!-- <include file="$(find delta_perception)/launch/play_rosbag.launch">
-        <arg name="filename" value="$(find delta_perception)/bags/Pune-01.bag" />
+        <arg name="filename" value="$(find delta_perception)/bags/Pittsburgh-02.bag" />
     </include> -->
 
     <include file="$(find carla_ros_bridge)/launch/client_with_radar.launch">
@@ -14,7 +14,7 @@
     </include>
 
     <!-- Run the perception pipeline -->
-    <node   
+    <node
         pkg="delta_perception"
         type="main.py"
         name="main"
@@ -22,34 +22,50 @@
     </node>
 
     <!-- Run lane detection -->
-    <node   
+    <node
         pkg="delta_perception"
         type="lane_detection.py"
         name="lane_detection"
         output="screen">
     </node>
 
-    <!-- Display output image -->
+    <!-- Run semantic segmentation -->
+    <!-- <node
+        pkg="delta_perception"
+        type="segmentation.py"
+        name="segmentation"
+        output="screen">
+    </node> -->
+
+    <!-- Run inverse_perspective mapping -->
+    <node
+        pkg="delta_perception"
+        type="ipm_node.py"
+        name="ipm_node"
+        output="screen">
+    </node>
+
+    <!-- Display object detection and tracking image -->
     <node
         name="image_view_object_detection_tracking"
         pkg="image_view"
         type="image_view"
         respawn="false"
         output="screen">
-        <remap from="image" to="/delta_perception/object_detection_tracking" />
+        <remap from="image" to="/delta/perception/object_detection_tracking/image" />
     </node>
 
-    <!-- Display output image -->
-    <!-- <node
+    <!-- Display lane detection image -->
+    <node
         name="image_view_lane_detection"
         pkg="image_view"
         type="image_view"
         respawn="false"
         output="screen">
-        <remap from="image" to="/delta_perception/lane_detection" />
-    </node> -->
+        <remap from="image" to="/delta/perception/ipm/image" />
+    </node>
 
-    <node 
+    <node
         type="rviz" name="rviz" pkg="rviz" args="-d $(find delta_perception)/perception.rviz">
     </node>
 

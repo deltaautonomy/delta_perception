@@ -1,6 +1,7 @@
 # Big files
 bags
 weights/
+*.mp4
 
 # Darknet related
 darknet/darknet
@@ -8,6 +9,10 @@ darknet/results
 darknet/backup
 darknet/mission_impossible.mp4
 darknet/uselib
+
+# Custom folders
+results
+segmentation/protos
 
 # Prerequisites
 *.d

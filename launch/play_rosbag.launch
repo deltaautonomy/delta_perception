@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <launch>
 
-    <arg name="filename" default="$(find delta_perception)/bags/Pittsburgh-02.bag" />
+    <arg name="filename" default="$(find delta_perception)/bags/calibration_04.bag" />
 
     <!-- Play rosbag record -->
     <node 

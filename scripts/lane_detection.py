@@ -121,7 +121,8 @@ def run(**kwargs):
     rospy.loginfo('Current PID: [%d]' % os.getpid())
 
     # Wait for main perception to start first
-    rospy.wait_for_message('/delta_perception/object_detection_tracking', Image)
+    # rospy.wait_for_message('/delta/perception/object_detection_tracking/image', Image)
+    rospy.wait_for_message('/delta/perception/segmentation/image', Image)
 
     # Setup models
     lanenet.setup()

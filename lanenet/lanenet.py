@@ -33,6 +33,7 @@ import tensorflow as tf
 # tf.get_logger().setLevel(logging.ERROR)
 
 # Local python modules
+import matplotlib.pyplot as plt
 from lanenet.lanenet_model import lanenet_cluster
 from lanenet.lanenet_model import lanenet_merge_model
 from lanenet.lanenet_model import lanenet_postprocess
@@ -74,6 +75,9 @@ class LaneNetModel:
 
             self.mask_image, self.point_list, self.valid_list = self.cluster.get_lane_mask(self.binary_seg_image[0],
                 self.instance_seg_image[0])
+            for i in range(4):
+                self.instance_seg_image[0][:, :, i] = self.instance_seg_image[0][:, :, i]
+            self.embedding_image = np.array(self.instance_seg_image[0], np.uint8)
 
         return self.mask_image, self.point_list, self.valid_list
 

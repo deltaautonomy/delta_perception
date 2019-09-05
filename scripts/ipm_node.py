@@ -57,23 +57,21 @@ def process(image_msg, lane_array, image_pub, vis=True, **kwargs):
     # img = increase_brightness(img)
 
     # Run segmentation
-    ipm_img, M = ipm.run(img.copy())
+    ipm_img = ipm.transform_image(img.copy())
 
     # Extract the lane points
     lane_points_top, lane_points_bot = [], []
     for lane in lane_array.lanes:
         # Top
-        lane_point = np.matmul(M, np.asarray([lane.xtop, lane.ytop, 1]))
-        lane_point = lane_point / lane_point[-1]
+        lane_point = ipm.transform_points_to_px([lane.xtop, lane.ytop])
         lane_points_top.append(tuple(lane_point[:2].astype('int').tolist()))
 
         # Bottom
-        lane_point = np.matmul(M, np.asarray([lane.xbot, lane.ybot, 1]))
-        lane_point = lane_point / lane_point[-1]
+        lane_point = ipm.transform_points_to_px([lane.xbot, lane.ybot])
         lane_points_bot.append(tuple(lane_point[:2].astype('int').tolist()))
 
     # Project segmentation image to IPM
-    # seg_img = cv2.warpPerspective(seg_img, M, (2700, 2500))
+    # seg_img = ipm.transform_image(seg_img)
 
     # Visualize and publish image message
     if vis:
@@ -81,12 +79,8 @@ def process(image_msg, lane_array, image_pub, vis=True, **kwargs):
         # for top, bot in zip(lane_points_top, lane_points_bot):
         #     cv2.line(ipm_img, top, bot, (0, 255, 0), 2)
 
-        # Rescale the IPM image
-        ipm_img = cv2.resize(ipm_img, (0, 0), fx=0.08, fy=0.3)
-
         # Overlay segmentation
-        # overlay = cv2.resize(seg_img, (0, 0), fx=0.08, fy=0.3)
-        # ipm_img = cv2.addWeighted(ipm_img, 1.0, overlay, 0.6, 0)
+        # ipm_img = cv2.addWeighted(ipm_img, 1.0, seg_img, 0.6, 0)
 
         # Publish the output
         cv2_to_message(ipm_img, image_pub)

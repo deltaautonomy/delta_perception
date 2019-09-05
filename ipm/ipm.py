@@ -40,77 +40,65 @@ from tf.transformations import euler_matrix, translation_matrix
 
 
 class InversePerspectiveMapping:
-    def __init__(self):
-        pass
-        # self.info = self.load_camera_info(filename)
-        # self.width = self.info['width']
-        # self.height = self.info['height']
-        
+    def __init__(self, filename='camera_info.yaml'):
+        self.info = self.load_camera_info(filename)
+        self.frame_width = self.info['width']
+        self.frame_height = self.info['height']
+
         # Intrinsics
-        # self.K = np.zeros((3, 4))
-        # self.K[:, :3] = np.asarray(self.info['intrinsics']['K']).reshape(3, 3)
-        # self.D = np.asarray(self.info['intrinsics']['D'])
+        self.K = np.zeros((3, 4))
+        self.K[:, :3] = np.asarray(self.info['intrinsics']['K']).reshape(3, 3)
+        self.D = np.asarray(self.info['intrinsics']['D'])
 
         # Extrinsics
-        # self.rpy = np.radians(self.info['extrinsics']['rpy'])
-        # self.rotation = euler_matrix(self.rpy[0], self.rpy[1], self.rpy[2])
-        # self.translation = translation_matrix(self.info['extrinsics']['position'])
-        # self.H = (self.translation @ self.rotation)
+        self.extrinsics_euler = np.radians(self.info['extrinsics']['rpy'])
+        self.extrinsics_rotation = euler_matrix(self.extrinsics_euler[0],
+            self.extrinsics_euler[1], self.extrinsics_euler[2])
+        self.extrinsics_translation = translation_matrix(self.info['extrinsics']['position'])
 
-        # self.projection_matrix = np.asarray([[1, 0, -self.width/2],
-        #                                      [0, 1, -self.height/2],
-        #                                      [0, 0, 0],
-        #                                      [0, 0, 1]])
-        # self.perspective_matrix = self.K @ self.H @ self.projection_matrix
+        # Overwrite calibration data if available
+        if 'calibration' not in self.info:
+            print('ERROR: Calibration not performed, run InversePerspectiveMapping.calibrate() first!')
+            return
+        else:
+            print('Loading calibration data from file...')
+            self.ipm_matrix = np.asarray(self.info['calibration']['ipm_matrix']).reshape(3, 3)
+            self.ipm_image_dims = tuple(self.info['calibration']['ipm_image_dims'][::-1])
+            self.ipm_px_to_m = self.info['calibration']['ipm_px_to_m']
+            self.ipm_m_to_px = self.info['calibration']['ipm_m_to_px']
+            self.calibration_ego_y = self.info['calibration']['calibration_ego_y']
+
 
     def load_camera_info(self, filename):
         with open(filename, 'r') as f:
             camera_info = yaml.load(f)
         return camera_info
 
-    def transform(self, img):
-        img = cv2.warpPerspective(img, self.perspective_matrix, (self.width, self.height))
+
+    def transform_image(self, img):
+        img = cv2.warpPerspective(img, self.ipm_matrix, self.ipm_image_dims)
         return img
 
-    def run(self, frame):
-        h, w = 500, 500
-        base = 1100
-        s = 1
-        # in_points = np.float32([(581, 155), (661, 155), (0, 406), (860, 406)])
-        in_points = np.float32([(478, 407), (815, 408), (316, 680), (980, 684)])
-        out_points = np.float32([(base, base), (h + base, base), (base, w + base), (h + base, w + base)])
-        persM = cv2.getPerspectiveTransform(in_points, out_points)
-        trans = np.asarray([[0, 0, 0], [0, 0, -1700], [0, 0, 0]]).reshape(3, 3)
-        # scale = np.asarray([[s, 0, 0], [0, s, 0], [0, 0, s]]).reshape(3, 3)
-        persM = persM + trans
-        # persM = np.matmul(persM, scale)
-        dst = cv2.warpPerspective(frame, persM, (2700, 2500))
-        # dst = cv2.resize(dst, (0, 0), fx=0.08, fy=0.3)
-        return dst, persM
+
+    def transform_points_to_px(self, points, squeeze=True):
+        ones = np.ones((len(points), 1))
+        if len(np.array(points).shape) == 1:
+            points = np.expand_dims(points, axis=0)
+            ones = np.array([[1]])
+
+        points_px = np.matmul(self.ipm_matrix, np.hstack([points, ones]).T)
+        points_px = points_px / points_px[-1]
+
+        if squeeze: return points_px.T[:, :2].squeeze()
+        return points_px.T[:, :2]
 
 
-if __name__ == '__main__':
-    ipm = InversePerspectiveMapping('camera_info.yaml')
-    folder = '../dataset/carla_dataset_02'
-    image_files = os.listdir(folder)
-    image_files.sort()
+    def transform_points_to_m(self, points):
+        points_px = self.transform_points_to_px(points, squeeze=False)
+        points_px[:, 0] = points_px[:, 0] - self.ipm_image_dims[0] / 2
+        points_px[:, 1] = self.ipm_image_dims[1] - points_px[:, 1]
 
-    win_name = 'Perspective Transform'
-    cv2.namedWindow(win_name)
-    cv2.moveWindow(win_name, 100, 100)
-    cv2.resizeWindow(win_name, 400, 400)
-    
-    for image_file in image_files:
-        image = cv2.imread('calibration-00392.jpg')
-        # image = cv2.imread(os.path.join(folder, image_file))
-        # output = ipm.transform(image)
-        output, M = ipm.test(image)
-        cv2.imshow(win_name, output)
-        # time.sleep(1/20.0)
-        cv2.waitKey(0)
-        break
+        points_m = points_px * self.ipm_px_to_m
+        points_m[:, 1] += self.calibration_ego_y
 
-    cv2.destroyAllWindows()
-        # break
-
-
+        return points_m.squeeze()

@@ -40,8 +40,8 @@ from tf.transformations import euler_matrix, translation_matrix
 
 
 class InversePerspectiveMapping:
-    def __init__(self, filename='camera_info.yaml'):
-        self.info = self.load_camera_info(filename)
+    def __init__(self, filename='ipm/camera_info.yaml'):
+        self.info = self.load_camera_info(osp.join(PKG_PATH, filename))
         self.frame_width = self.info['width']
         self.frame_height = self.info['height']
 

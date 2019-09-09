@@ -21,14 +21,16 @@ from visualization_msgs.msg import Marker
 ########################### Functions ###########################
 
 
-def make_label(text, position, id=0, duration=0, color=[1.0, 1.0, 1.0]):
+def make_label(text, position, frame_id='/map', marker_id=0,
+    duration=0, color=[1.0, 1.0, 1.0]):
     """ 
     Helper function for generating visualization markers
     
     Args:
         text (str): Text string to be displayed.
         position (list): List containing [x,y,z] positions
-        id (int): Integer identifying the label
+        frame_id (str): ROS TF frame id
+        marker_id (int): Integer identifying the label
         duration (rospy.Duration): How long the label will be displayed for
         color (list): List of label color floats from 0 to 1 [r,g,b]
     
@@ -36,8 +38,8 @@ def make_label(text, position, id=0, duration=0, color=[1.0, 1.0, 1.0]):
         Marker: A text view marker which can be published to RViz
     """
     marker = Marker()
-    marker.header.frame_id = '/map'
-    marker.id = id
+    marker.header.frame_id = frame_id
+    marker.id = marker_id
     marker.type = marker.TEXT_VIEW_FACING
     marker.text = text
     marker.action = marker.ADD
@@ -56,14 +58,16 @@ def make_label(text, position, id=0, duration=0, color=[1.0, 1.0, 1.0]):
     return marker
 
 
-def make_cuboid(position, scale, id=0, duration=0, color=[1.0, 1.0, 1.0]):
+def make_cuboid(position, scale, frame_id='/map', marker_id=0,
+    duration=0, color=[1.0, 1.0, 1.0]):
     """ 
     Helper function for generating visualization markers
     
     Args:
         position (list): List containing [x, y, z] positions
         scale (list): List containing [x, y, z] dimensions
-        id (int): Integer identifying the label
+        frame_id (str): ROS TF frame id
+        marker_id (int): Integer identifying the label
         duration (rospy.Duration): How long the label will be displayed for
         color (list): List of label color floats from 0 to 1 [r, g, b]
     
@@ -71,10 +75,10 @@ def make_cuboid(position, scale, id=0, duration=0, color=[1.0, 1.0, 1.0]):
         Marker: A cube marker which can be published to RViz
     """
     marker = Marker()
-    marker.header.frame_id = '/map'
-    marker.id = id
+    marker.header.frame_id = frame_id
+    marker.id = marker_id
     marker.type = marker.CUBE
-    marker.text = str(id)
+    marker.text = str(marker_id)
     marker.action = marker.ADD
     marker.scale.x = scale[0]
     marker.scale.y = scale[1]

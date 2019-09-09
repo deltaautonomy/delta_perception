@@ -45,6 +45,7 @@ from sort.sort import Sort
 from darknet.darknet_video import YOLO
 from ipm.ipm import InversePerspectiveMapping
 from validator.calculate_map import calculate_map
+from cube_marker_publisher import make_cuboid
 
 # Global objects
 STOP_FLAG = False
@@ -176,7 +177,7 @@ def validate(image, objects, detections, image_pub, **kwargs):
             f.write(text)
 
 
-def visualize(img, tracked_targets, detections, radar_targets, **kwargs):
+def visualize(img, tracked_targets, detections, radar_targets, publishers, **kwargs):
     # Draw visualizations
     # img = YOLO.cvDrawBoxes(detections, img)
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -191,15 +192,20 @@ def visualize(img, tracked_targets, detections, radar_targets, **kwargs):
             (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 3)
 
     # Project the radar points on the image
-    for tid, uv, dist, vel in radar_targets:
+    for track_id, uv, pos, vel in radar_targets:
         uv = np.asarray(uv).flatten().tolist()
         cv2.circle(img, tuple(uv), 10, (0, 0, 255), 3)
-        cv2.putText(img, '[P: %.2fm]' % (dist), 
+        cv2.putText(img, '[P: %.2fm]' % (pos[0]),
             tuple(uv), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
         cv2.putText(img, '[V: %.2fKm/h]' % (vel * 3.6), 
             (uv[0], uv[1] + 15), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
 
-    return img
+        # Publish radar track marker for debugging.
+        radar_marker = make_cuboid(position=pos, scale=[0.5] * 3,
+            frame_id=RADAR_FRAME, marker_id=track_id, duration=0.5, color=[1, 0, 0])
+        publishers['radar_marker_pub'].publish(radar_marker)
+
+    cv2_to_message(img, publishers['image_pub'])
 
 
 def get_radar_targets(radar_msg):
@@ -213,11 +219,11 @@ def get_radar_targets(radar_msg):
             uv = np.matmul(CAMERA_PROJECTION_MATRIX, pos)
             uv = uv / uv[-1]
             uv = uv[:2].astype('int').tolist()
-            uv_points.append((track.track_id, uv, pos[0], track.linear_velocity.x))
+            uv_points.append((track.track_id, uv, pos[:3], track.linear_velocity.x))
     return uv_points
 
 
-def publish_camera_tracks(tracker_pub, tracked_targets, detections, timestamp):
+def publish_camera_tracks(publishers, tracked_targets, detections, timestamp):
     camera_track_array = CameraTrackArray()
     camera_track_array.header.stamp = timestamp
     camera_track_array.header.frame_id = EGO_VEHICLE_FRAME
@@ -227,20 +233,25 @@ def publish_camera_tracks(tracker_pub, tracked_targets, detections, timestamp):
         label, score, _ = detection
         u1, v1, u2, v2, track_id = target
         # todo(heethesh): Verify u/v convention here
-        x, y = ipm.transform_points_to_m([(u1 + u2) / 2, v2])  # Bottom mid-point of bbox
+        x, y = ipm.transform_points_to_m([(u1 + u2) / 2, (v1 + v2) / 2])  # Bottom mid-point of bbox
         camera_track = CameraTrack()
-        camera_track.x = x
-        camera_track.y = y
-        camera_track.id = track_id
+        camera_track.x = y
+        camera_track.y = -x
+        camera_track.track_id = track_id
         camera_track.label = label
         camera_track.confidence = score
         camera_track_array.tracks.append(camera_track)
 
+        # Publish camera track marker for debugging.
+        camera_marker = make_cuboid(position=[y, -x, 0], scale=[0.5] * 3,
+            frame_id=EGO_VEHICLE_FRAME, marker_id=track_id, duration=0.5, color=[0, 0, 1])
+        publishers['camera_marker_pub'].publish(camera_marker)
+
     # Publish the camera tarck data.
-    tracker_pub.publish(camera_track_array)
+    publishers['tracker_pub'].publish(camera_track_array)
 
 
-def perception_pipeline(img, radar_msg, image_pub, tracker_pub, vis=True, **kwargs):
+def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
 
@@ -259,25 +270,25 @@ def perception_pipeline(img, radar_msg, image_pub, tracker_pub, vis=True, **kwar
     sort_fps.tick()
 
     # Publish camera tracks
-    publish_camera_tracks(tracker_pub, tracked_targets, detections, radar_msg.header.stamp)
+    publish_camera_tracks(publishers, tracked_targets,
+        detections, radar_msg.header.stamp)
 
     # RADAR tracking
     radar_targets = get_radar_targets(radar_msg)
 
     # Display FPS logger status
     all_fps.tick()
-    sys.stdout.write('\r%s | %s | %s ' % (all_fps.get_log(), yolo_fps.get_log(), sort_fps.get_log()))
+    sys.stdout.write('\r%s | %s | %s ' % (all_fps.get_log(),
+        yolo_fps.get_log(), sort_fps.get_log()))
     sys.stdout.flush()
 
     # Visualize and publish image message
-    if vis:
-        img = visualize(img, tracked_targets, detections, radar_targets)
-        cv2_to_message(img, image_pub)
+    if vis: visualize(img, tracked_targets, detections, radar_targets, publishers)
 
     return detections
 
 
-def perception_callback(image_msg, radar_msg, objects, image_pub, tracker_pub, **kwargs):
+def perception_callback(image_msg, radar_msg, objects, publishers, **kwargs):
     # Node stop has been requested
     if STOP_FLAG: return
 
@@ -288,10 +299,10 @@ def perception_callback(image_msg, radar_msg, objects, image_pub, tracker_pub, *
         sys.exit(1)
 
     # Run the perception pipeline
-    detections = perception_pipeline(img.copy(), radar_msg, image_pub, tracker_pub)
+    detections = perception_pipeline(img.copy(), radar_msg, publishers)
 
     # Run the validation pipeline
-    validate(img.copy(), objects, detections, image_pub)
+    validate(img.copy(), objects, detections, publishers['image_pub'])
 
 
 def shutdown_hook():
@@ -331,15 +342,21 @@ def run(**kwargs):
     radar = rospy.get_param('~radar', '/delta/radar/tracks')
     output_image = rospy.get_param('~output_image', '/delta/perception/object_detection_tracking/image')
     camera_track = rospy.get_param('~camera_track', '/delta/perception/camera_track')
+    camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
+    radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('RADAR topic: %s' % radar)
+    rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
 
     # Publish output topic
-    image_pub = rospy.Publisher(output_image, Image, queue_size=5)
-    tracker_pub = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
+    publishers = {}
+    publishers['image_pub'] = rospy.Publisher(output_image, Image, queue_size=5)
+    publishers['tracker_pub'] = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
+    publishers['camera_marker_pub'] = rospy.Publisher(camera_track_marker, Marker, queue_size=5)
+    publishers['radar_marker_pub'] = rospy.Publisher(radar_track_marker, Marker, queue_size=5)
 
     # Subscribe to topics
     info_sub = rospy.Subscriber(camera_info, CameraInfo, camera_info_callback)
@@ -351,7 +368,7 @@ def run(**kwargs):
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
         [image_sub, radar_sub, object_sub], queue_size=1, slop=0.5)
-    ats.registerCallback(perception_callback, image_pub, tracker_pub, **kwargs)
+    ats.registerCallback(perception_callback, publishers, **kwargs)
 
     # Shutdown hook
     rospy.on_shutdown(shutdown_hook)

@@ -68,17 +68,14 @@ class InversePerspectiveMapping:
             self.ipm_m_to_px = self.info['calibration']['ipm_m_to_px']
             self.calibration_ego_y = self.info['calibration']['calibration_ego_y']
 
-
     def load_camera_info(self, filename):
         with open(filename, 'r') as f:
             camera_info = yaml.load(f)
         return camera_info
 
-
     def transform_image(self, img):
         img = cv2.warpPerspective(img, self.ipm_matrix, self.ipm_image_dims)
         return img
-
 
     def transform_points_to_px(self, points, squeeze=True):
         ones = np.ones((len(points), 1))
@@ -91,7 +88,6 @@ class InversePerspectiveMapping:
 
         if squeeze: return points_px.T[:, :2].squeeze()
         return points_px.T[:, :2]
-
 
     def transform_points_to_m(self, points):
         points_px = self.transform_points_to_px(points, squeeze=False)

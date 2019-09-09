@@ -42,7 +42,7 @@ ipm = InversePerspectiveMapping()
 
 # FPS loggers
 FRAME_COUNT = 0
-lane_fps = FPSLogger('IPM')
+ipm_fps = FPSLogger('IPM')
 
 
 ########################### Functions ###########################

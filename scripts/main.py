@@ -35,6 +35,7 @@ from cv_bridge import CvBridge, CvBridgeError
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg import Image, CameraInfo
 from delta_perception.msg import MarkerArrayStamped
+from delta_perception.msg import CameraTrack, CameraTrackArray
 from radar_msgs.msg import RadarTrack, RadarTrackArray
 from derived_object_msgs.msg import Object, ObjectArray
 
@@ -42,6 +43,7 @@ from derived_object_msgs.msg import Object, ObjectArray
 from utils import *
 from sort.sort import Sort
 from darknet.darknet_video import YOLO
+from ipm.ipm import InversePerspectiveMapping
 from validator.calculate_map import calculate_map
 
 # Global objects
@@ -62,6 +64,7 @@ VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 
 # Perception models
 yolov3 = YOLO()
+ipm = InversePerspectiveMapping()
 tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
 # tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 # yolo_validator = ObjectDetectionValidator()
@@ -214,13 +217,30 @@ def get_radar_targets(radar_msg):
     return uv_points
 
 
-def sensor_fusion(dets, tracked_targets, radar_targets):
-    # TODO: Implement this
-    time.sleep(0.005)
-    return None
+def publish_camera_tracks(tracker_pub, tracked_targets, detections, timestamp):
+    camera_track_array = CameraTrackArray()
+    camera_track_array.header.stamp = timestamp
+    camera_track_array.header.frame_id = EGO_VEHICLE_FRAME
+    
+    # Populate camera track message.
+    for target, detection in zip(tracked_targets, detections):
+        label, score, _ = detection
+        u1, v1, u2, v2, track_id = target
+        # todo(heethesh): Verify u/v convention here
+        x, y = ipm.transform_points_to_m([(u1 + u2) / 2, v2])  # Bottom mid-point of bbox
+        camera_track = CameraTrack()
+        camera_track.x = x
+        camera_track.y = y
+        camera_track.id = track_id
+        camera_track.label = label
+        camera_track.confidence = score
+        camera_track_array.tracks.append(camera_track)
+
+    # Publish the camera tarck data.
+    tracker_pub.publish(camera_track_array)
 
 
-def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
+def perception_pipeline(img, radar_msg, image_pub, tracker_pub, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
 
@@ -238,13 +258,11 @@ def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
     tracked_targets = tracker.update(dets, img)
     sort_fps.tick()
 
+    # Publish camera tracks
+    publish_camera_tracks(tracker_pub, tracked_targets, detections, radar_msg.header.stamp)
+
     # RADAR tracking
     radar_targets = get_radar_targets(radar_msg)
-
-    # Sensor fusion
-    # fusion_fps.lap()
-    # ret = sensor_fusion(dets, tracked_targets, radar_targets)
-    # fusion_fps.tick()
 
     # Display FPS logger status
     all_fps.tick()
@@ -259,7 +277,7 @@ def perception_pipeline(img, radar_msg, image_pub, vis=True, **kwargs):
     return detections
 
 
-def perception_callback(image_msg, radar_msg, objects, image_pub, **kwargs):
+def perception_callback(image_msg, radar_msg, objects, image_pub, tracker_pub, **kwargs):
     # Node stop has been requested
     if STOP_FLAG: return
 
@@ -270,7 +288,7 @@ def perception_callback(image_msg, radar_msg, objects, image_pub, **kwargs):
         sys.exit(1)
 
     # Run the perception pipeline
-    detections = perception_pipeline(img.copy(), radar_msg, image_pub)
+    detections = perception_pipeline(img.copy(), radar_msg, image_pub, tracker_pub)
 
     # Run the validation pipeline
     validate(img.copy(), objects, detections, image_pub)
@@ -312,6 +330,7 @@ def run(**kwargs):
     # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
     radar = rospy.get_param('~radar', '/delta/radar/tracks')
     output_image = rospy.get_param('~output_image', '/delta/perception/object_detection_tracking/image')
+    camera_track = rospy.get_param('~camera_track', '/delta/perception/camera_track')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
@@ -320,6 +339,7 @@ def run(**kwargs):
 
     # Publish output topic
     image_pub = rospy.Publisher(output_image, Image, queue_size=5)
+    tracker_pub = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
 
     # Subscribe to topics
     info_sub = rospy.Subscriber(camera_info, CameraInfo, camera_info_callback)
@@ -331,7 +351,7 @@ def run(**kwargs):
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
         [image_sub, radar_sub, object_sub], queue_size=1, slop=0.5)
-    ats.registerCallback(perception_callback, image_pub, **kwargs)
+    ats.registerCallback(perception_callback, image_pub, tracker_pub, **kwargs)
 
     # Shutdown hook
     rospy.on_shutdown(shutdown_hook)

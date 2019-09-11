@@ -38,6 +38,7 @@ from delta_perception.msg import MarkerArrayStamped
 from delta_perception.msg import CameraTrack, CameraTrackArray
 from radar_msgs.msg import RadarTrack, RadarTrackArray
 from derived_object_msgs.msg import Object, ObjectArray
+from nav_msgs.msg import OccupancyGrid
 
 # Local python modules
 from utils import *
@@ -46,6 +47,7 @@ from darknet.darknet_video import YOLO
 from ipm.ipm import InversePerspectiveMapping
 from validator.calculate_map import calculate_map
 from cube_marker_publisher import make_cuboid
+from occupancy_grid import DeltaOccupancyGrid
 
 # Global objects
 STOP_FLAG = False
@@ -67,6 +69,7 @@ VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 yolov3 = YOLO()
 ipm = InversePerspectiveMapping()
 tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
+occupancy_grid = DeltaOccupancyGrid(15, 100, EGO_VEHICLE_FRAME)
 # tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 # yolo_validator = ObjectDetectionValidator()
 
@@ -251,6 +254,20 @@ def publish_camera_tracks(publishers, tracked_targets, detections, timestamp):
     publishers['tracker_pub'].publish(camera_track_array)
 
 
+def publish_occupancy_grid(publishers, tracked_targets, radar_msg):
+    grid = occupancy_grid.empty_grid()
+    for track in radar_msg.tracks:
+        pos = position_to_numpy(track.track_shape.points[0])
+        grid = occupancy_grid.place(pos, 100, grid)
+
+    # for target in tracked_targets:
+    #     u1, v1, u2, v2, track_id = target
+    #     x, y = ipm.transform_points_to_m([(u1 + u2) / 2, (v1 + v2) / 2])
+
+    grid_msg = occupancy_grid.refresh(grid, radar_msg.header.stamp)
+    publishers['occupancy_grid_pub'].publish(grid_msg)
+
+
 def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
@@ -275,6 +292,9 @@ def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
 
     # RADAR tracking
     radar_targets = get_radar_targets(radar_msg)
+
+    # Publish occupancy grid
+    publish_occupancy_grid(publishers, tracked_targets, radar_msg)
 
     # Display FPS logger status
     all_fps.tick()
@@ -344,12 +364,14 @@ def run(**kwargs):
     camera_track = rospy.get_param('~camera_track', '/delta/perception/camera_track')
     camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
     radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
+    occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/occupancy_grid')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('RADAR topic: %s' % radar)
     rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
+    rospy.loginfo('OccupancyGrid topic: %s' % camera_track)
 
     # Publish output topic
     publishers = {}
@@ -357,6 +379,7 @@ def run(**kwargs):
     publishers['tracker_pub'] = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
     publishers['camera_marker_pub'] = rospy.Publisher(camera_track_marker, Marker, queue_size=5)
     publishers['radar_marker_pub'] = rospy.Publisher(radar_track_marker, Marker, queue_size=5)
+    publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
 
     # Subscribe to topics
     info_sub = rospy.Subscriber(camera_info, CameraInfo, camera_info_callback)

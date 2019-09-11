@@ -125,6 +125,13 @@ def orientation_to_numpy(orientation):
     return np.asarray([orientation.x, orientation.y, orientation.z, orientation.w])
 
 
+def numpy_to_position(numpy_pos, position):
+    position.position.x = numpy_pos[0]
+    position.position.y = numpy_pos[1]
+    position.position.z = numpy_pos[2]
+    return position
+
+
 def orientation_to_rpy(orientation):
     return euler_from_quaternion(orientation_to_numpy(quaternion))
 

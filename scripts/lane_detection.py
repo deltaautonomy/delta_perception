@@ -31,17 +31,23 @@ from cv_bridge import CvBridge, CvBridgeError
 
 # ROS messages
 from sensor_msgs.msg import Image
+from nav_msgs.msg import OccupancyGrid
 from delta_perception.msg import LaneMarking, LaneMarkingArray
 
 # Local python modules
 from utils import *
 from lanenet.lanenet import LaneNetModel
+from ipm.ipm import InversePerspectiveMapping
+from occupancy_grid import DeltaOccupancyGrid
 
 # Frames
 CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
+EGO_VEHICLE_FRAME = 'ego_vehicle'
 
 # Perception models
 lanenet = LaneNetModel()
+ipm = InversePerspectiveMapping()
+occupancy_grid = DeltaOccupancyGrid(15, 100, EGO_VEHICLE_FRAME)
 
 # FPS loggers
 FRAME_COUNT = 0
@@ -51,7 +57,7 @@ lane_fps = FPSLogger('LaneNet')
 ########################### Functions ###########################
 
 
-def lane_detection(image_msg, image_pub, lane_pub, vis=True, **kwargs):
+def lane_detection(image_msg, publishers, vis=True, **kwargs):
     # Read image message
     img = message_to_cv2(image_msg)
     if img is None: return
@@ -95,19 +101,31 @@ def lane_detection(image_msg, image_pub, lane_pub, vis=True, **kwargs):
         lane_array.lanes.append(lane)
 
     # Publish the lane data
-    lane_pub.publish(lane_array)
+    publishers['lane_pub'].publish(lane_array)
+
+    # Convert lane map image to x, y points
+    lane_map = cv2.cvtColor(lane_img, cv2.COLOR_RGB2GRAY)
+    u, v = lane_map[lane_map > 127]
+    uv_points = np.stack((u, v)).T
+    points_m = ipm.transform_points_to_m(uv_points)
+
+    # Convert x, y points to occupancy grid
+    grid = occupancy_grid.empty_grid()
+    for x, y in points_m: grid = occupancy_grid.place([y, -x], 100, grid)
+    grid_msg = occupancy_grid.refresh(grid, image_msg.header.stamp)
+    publishers['occupancy_grid_pub'].publish(grid_msg)
 
     # Visualize and publish image message
-    if vis:
-        # Display lane markings
-        overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
-        img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
-        cv2_to_message(img, image_pub)
+    # if vis:
+    #     # Display lane markings
+    #     overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
+    #     img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
+    #     cv2_to_message(img, image_pub)
 
 
-def callback(image_msg, image_pub, lane_pub, **kwargs):
+def callback(image_msg, publishers, **kwargs):
     # Run the perception pipeline
-    lane_detection(image_msg, image_pub, lane_pub)
+    lane_detection(image_msg, publishers)
 
 
 def shutdown_hook():
@@ -121,8 +139,8 @@ def run(**kwargs):
     rospy.loginfo('Current PID: [%d]' % os.getpid())
 
     # Wait for main perception to start first
-    # rospy.wait_for_message('/delta/perception/object_detection_tracking/image', Image)
-    rospy.wait_for_message('/delta/perception/segmentation/image', Image)
+    rospy.wait_for_message('/delta/perception/object_detection_tracking/image', Image)
+    # rospy.wait_for_message('/delta/perception/segmentation/image', Image)
 
     # Setup models
     lanenet.setup()
@@ -131,15 +149,18 @@ def run(**kwargs):
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
     lane_output = rospy.get_param('~lane_output', '/delta/perception/lane/markings')
     output_image = rospy.get_param('~output_image', '/delta/perception/lane/image')
+    occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/lane_occupancy_grid')
 
     # Display params and topics
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('Lane marking topic: %s' % lane_output)
     rospy.loginfo('Output topic: %s' % output_image)
+    rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
 
     # Publish output topic
-    lane_pub = rospy.Publisher(lane_output, LaneMarkingArray, queue_size=5)
-    image_pub = rospy.Publisher(output_image, Image, queue_size=5)
+    publishers['lane_pub'] = rospy.Publisher(lane_output, LaneMarkingArray, queue_size=5)
+    publishers['image_pub'] = rospy.Publisher(output_image, Image, queue_size=5)
+    publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
 
     # Subscribe to topics
     image_sub = message_filters.Subscriber(image_color, Image)

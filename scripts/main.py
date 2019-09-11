@@ -371,7 +371,7 @@ def run(**kwargs):
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('RADAR topic: %s' % radar)
     rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
-    rospy.loginfo('OccupancyGrid topic: %s' % camera_track)
+    rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
 
     # Publish output topic
     publishers = {}

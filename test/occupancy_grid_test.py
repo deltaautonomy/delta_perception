@@ -26,5 +26,5 @@ def demo():
 
 
 if __name__ == "__main__":
-    rospy.init_node("test_occupancy_grid")
+    rospy.init_node("occupancy_grid_test")
     demo()

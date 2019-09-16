@@ -17,7 +17,7 @@ random_vehicles = ['car', 'truck', 'bus', 'motorbike', 'bicycle']
 def talker():
     # Setup node
     pub = rospy.Publisher('/delta/ground_truth/vehicles', VehicleGroundTruthArray, queue_size=10)
-    rospy.init_node('vehicle_publisher', anonymous=True)
+    rospy.init_node('vehicle_ground_truth_publisher_test', anonymous=True)
     
     # Ignore this if you use a camera/image callback to publish the data
     r = rospy.Rate(0.25)

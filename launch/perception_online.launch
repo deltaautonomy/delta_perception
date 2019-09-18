@@ -6,8 +6,8 @@
         <arg name="filename" value="$(find delta_perception)/bags/Pittsburgh-02.bag" />
     </include> -->
 
-    <include file="$(find carla_ros_bridge)/launch/client_with_radar.launch">
-    </include>
+    <!-- <include file="$(find carla_ros_bridge)/launch/client_with_radar.launch">
+    </include> -->
 
     <!-- Run ego-vehicle prediction -->
     <include file="$(find delta_prediction)/launch/ego_vehicle_prediction.launch">
@@ -22,12 +22,12 @@
     </node>
 
     <!-- Run lane detection -->
-    <!-- <node
+    <node
         pkg="delta_perception"
         type="lane_detection.py"
         name="lane_detection"
         output="screen">
-    </node> -->
+    </node>
 
     <!-- Run semantic segmentation -->
     <!-- <node

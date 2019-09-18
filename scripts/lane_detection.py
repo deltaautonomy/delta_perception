@@ -47,7 +47,7 @@ EGO_VEHICLE_FRAME = 'ego_vehicle'
 # Perception models
 lanenet = LaneNetModel()
 ipm = InversePerspectiveMapping()
-occupancy_grid = DeltaOccupancyGrid(15, 100, EGO_VEHICLE_FRAME)
+occupancy_grid = DeltaOccupancyGrid(30, 100, EGO_VEHICLE_FRAME, resolution=0.2)
 
 # FPS loggers
 FRAME_COUNT = 0
@@ -104,8 +104,9 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     publishers['lane_pub'].publish(lane_array)
 
     # Convert lane map image to x, y points
+    lane_img = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
     lane_map = cv2.cvtColor(lane_img, cv2.COLOR_RGB2GRAY)
-    u, v = lane_map[lane_map > 127]
+    v, u = np.where(lane_map > 0)
     uv_points = np.stack((u, v)).T
     points_m = ipm.transform_points_to_m(uv_points)
 
@@ -120,7 +121,9 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     #     # Display lane markings
     #     overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
     #     img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
-    #     cv2_to_message(img, image_pub)
+    
+    # lane_map = ipm.transform_image(lane_map)
+    cv2_to_message(lane_map, publishers['image_pub'])
 
 
 def callback(image_msg, publishers, **kwargs):
@@ -158,6 +161,7 @@ def run(**kwargs):
     rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
 
     # Publish output topic
+    publishers = {}
     publishers['lane_pub'] = rospy.Publisher(lane_output, LaneMarkingArray, queue_size=5)
     publishers['image_pub'] = rospy.Publisher(output_image, Image, queue_size=5)
     publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
@@ -167,7 +171,7 @@ def run(**kwargs):
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer([image_sub], queue_size=1, slop=0.1)
-    ats.registerCallback(callback, image_pub, lane_pub, **kwargs)
+    ats.registerCallback(callback, publishers, **kwargs)
 
     # Shutdown hook
     rospy.on_shutdown(shutdown_hook)

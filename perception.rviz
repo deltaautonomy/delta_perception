@@ -3,9 +3,7 @@ Panels:
     Help Height: 0
     Name: Displays
     Property Tree Widget:
-      Expanded:
-        - /Image3
-        - /Map1
+      Expanded: ~
       Splitter Ratio: 0.5
     Tree Height: 150
   - Class: rviz/Selection
@@ -117,7 +115,7 @@ Visualization Manager:
       Marker Topic: /delta/prediction/ego
       Name: Marker
       Namespaces:
-        {}
+        predicted_trajectory: true
       Queue Size: 100
       Value: true
     - Class: rviz/Image
@@ -170,6 +168,16 @@ Visualization Manager:
       Unreliable: false
       Use Timestamp: false
       Value: true
+    - Alpha: 0.5
+      Class: rviz/Map
+      Color Scheme: costmap
+      Draw Behind: false
+      Enabled: true
+      Name: Map
+      Topic: /delta/perception/lane_occupancy_grid
+      Unreliable: false
+      Use Timestamp: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -195,25 +203,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 42.1884155
+      Distance: 46.57061
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.0599999987
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 10.7140713
-        Y: 0.0392402895
-        Z: 3.21920133
+        X: 12.6623554
+        Y: 0.132832229
+        Z: 6.70017147
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.0500000007
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.00999999978
-      Pitch: 0.594796181
+      Pitch: 0.534797013
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.10787463
+      Yaw: 3.13787246
     Saved: ~
 Window Geometry:
   Displays:

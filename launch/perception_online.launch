@@ -10,8 +10,8 @@
     </include> -->
 
     <!-- Run ego-vehicle prediction -->
-    <include file="$(find delta_prediction)/launch/ego_vehicle_prediction.launch">
-    </include>
+    <!-- <include file="$(find delta_prediction)/launch/ego_vehicle_prediction.launch">
+    </include> -->
 
     <!-- Run the perception pipeline -->
     <node

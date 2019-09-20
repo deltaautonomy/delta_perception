@@ -359,7 +359,7 @@ def run(**kwargs):
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
     object_array = rospy.get_param('~object_array', '/carla/objects')
     # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
-    radar = rospy.get_param('~radar', '/delta/radar/tracks')
+    radar = rospy.get_param('~radar', '/carla/ego_vehicle/radar/tracks')
     output_image = rospy.get_param('~output_image', '/delta/perception/object_detection_tracking/image')
     camera_track = rospy.get_param('~camera_track', '/delta/perception/camera_track')
     camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')

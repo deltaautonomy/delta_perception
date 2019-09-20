@@ -361,7 +361,7 @@ def run(**kwargs):
     # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
     radar = rospy.get_param('~radar', '/carla/ego_vehicle/radar/tracks')
     output_image = rospy.get_param('~output_image', '/delta/perception/object_detection_tracking/image')
-    camera_track = rospy.get_param('~camera_track', '/delta/perception/camera_track')
+    camera_track = rospy.get_param('~camera_track', '/delta/perception/ipm/camera_track')
     camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
     radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
     occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/occupancy_grid')

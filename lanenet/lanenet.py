@@ -26,6 +26,7 @@ else:
 
 # External modules
 import tensorflow as tf
+import matplotlib.pyplot as plt
 
 # Set environment variables
 # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -33,13 +34,13 @@ import tensorflow as tf
 # tf.get_logger().setLevel(logging.ERROR)
 
 # Local python modules
-import matplotlib.pyplot as plt
 from lanenet.lanenet_model import lanenet_cluster
 from lanenet.lanenet_model import lanenet_merge_model
 from lanenet.lanenet_model import lanenet_postprocess
 
 # Global variables
 VGG_MEAN = [103.939, 116.779, 123.68]
+
 
 class LaneNetModel:
     def __init__(self, weights_path=None):

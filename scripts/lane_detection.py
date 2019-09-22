@@ -36,7 +36,7 @@ from delta_perception.msg import LaneMarking, LaneMarkingArray
 
 # Local python modules
 from utils import *
-from lanenet.lanenet import LaneNetModel
+from erfnet.lane_detection import ERFNetInference
 from ipm.ipm import InversePerspectiveMapping
 from occupancy_grid import DeltaOccupancyGrid
 
@@ -45,7 +45,7 @@ CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
 EGO_VEHICLE_FRAME = 'ego_vehicle'
 
 # Perception models
-lanenet = LaneNetModel()
+erfnet = ERFNetInference()
 ipm = InversePerspectiveMapping()
 occupancy_grid = DeltaOccupancyGrid(30, 100, EGO_VEHICLE_FRAME, resolution=0.2)
 
@@ -62,46 +62,38 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     img = message_to_cv2(image_msg)
     if img is None: return
 
-    # Preprocess
-    # img = increase_brightness(img)
-
     # Lane detection
     lane_fps.lap()
     try:
-        lane_img, points, _ = lanenet.run(img)
+        lane_img = erfnet.run(img)
     except Exception as e:
         print(e)
         return
     lane_fps.tick()
 
-    # Run lane detection
-    if len(points) < 3:
-        print('Less than 3 lanes in detected lanes visible')
-        return
+    # # Fit lines on contours
+    # rows, cols = img.shape[:2]
+    # fy = img.shape[0] / float(lane_img.shape[0])
+    # fx = img.shape[1] / float(lane_img.shape[1])
 
-    # Fit lines on contours
-    rows, cols = img.shape[:2]
-    fy = img.shape[0] / float(lane_img.shape[0])
-    fx = img.shape[1] / float(lane_img.shape[1])
+    # # Scale predicted points
+    # points[:, 0] = points[:, 0] * fx
+    # points[:, 1] = points[:, 1] * fy
+    # points[:, 2] = points[:, 2] * fx
+    # points[:, 3] = points[:, 3] * fy
 
-    # Scale predicted points
-    points[:, 0] = points[:, 0] * fx
-    points[:, 1] = points[:, 1] * fy
-    points[:, 2] = points[:, 2] * fx
-    points[:, 3] = points[:, 3] * fy
+    # # Convert to lane marking array
+    # lane_array = LaneMarkingArray()
+    # lane_array.header.stamp = image_msg.header.stamp
+    # lane_array.header.frame_id = CAMERA_FRAME
+    # for xbot, ybot, xtop, ytop in points:
+    #     lane = LaneMarking()
+    #     lane.xtop, lane.ytop = xtop, ytop
+    #     lane.xbot, lane.ybot = xbot, ybot
+    #     lane_array.lanes.append(lane)
 
-    # Convert to lane marking array
-    lane_array = LaneMarkingArray()
-    lane_array.header.stamp = image_msg.header.stamp
-    lane_array.header.frame_id = CAMERA_FRAME
-    for xbot, ybot, xtop, ytop in points:
-        lane = LaneMarking()
-        lane.xtop, lane.ytop = xtop, ytop
-        lane.xbot, lane.ybot = xbot, ybot
-        lane_array.lanes.append(lane)
-
-    # Publish the lane data
-    publishers['lane_pub'].publish(lane_array)
+    # # Publish the lane data
+    # publishers['lane_pub'].publish(lane_array)
 
     # Convert lane map image to x, y points
     lane_img = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
@@ -122,7 +114,7 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     #     overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
     #     img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
     
-    # lane_map = ipm.transform_image(lane_map)
+    lane_map = ipm.transform_image(lane_map)
     cv2_to_message(lane_map, publishers['image_pub'])
 
 
@@ -133,7 +125,7 @@ def callback(image_msg, publishers, **kwargs):
 
 def shutdown_hook():
     print('\n\033[95m' + '*' * 30 + ' Lane Detection Shutdown ' + '*' * 30 + '\033[00m\n')
-    lanenet.close()
+    erfnet.close()
 
 
 def run(**kwargs):
@@ -142,17 +134,17 @@ def run(**kwargs):
     rospy.loginfo('Current PID: [%d]' % os.getpid())
 
     # Wait for main perception to start first
-    rospy.wait_for_message('/delta/perception/object_detection_tracking/image', Image)
+    # rospy.wait_for_message('/delta/perception/object_detection_tracking/image', Image)
     # rospy.wait_for_message('/delta/perception/segmentation/image', Image)
 
     # Setup models
-    lanenet.setup()
+    erfnet.setup()
 
     # Handle params and topics
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
-    lane_output = rospy.get_param('~lane_output', '/delta/perception/lane/markings')
-    output_image = rospy.get_param('~output_image', '/delta/perception/lane/image')
-    occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/lane_occupancy_grid')
+    lane_output = rospy.get_param('~lane_output', '/delta/perception/lane_detection/markings')
+    output_image = rospy.get_param('~output_image', '/delta/perception/lane_detection/image')
+    occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/lane_detection/occupancy_grid')
 
     # Display params and topics
     rospy.loginfo('Image topic: %s' % image_color)

@@ -23,18 +23,7 @@ class LaneKalmanFilter():
         # Initial state
         self.x = np.zeros([12, 1])
         # state transition matrix
-        self.F = np.array([[1, T, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 1, T, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 1, T, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 1, T, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 1, T, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, T],
-                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+        self.F = np.zeros([12, 12])
         # H is how we go from state variable to measurement variable
         self.H = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 0, 1, 0, 0, 0, 0, 0 ,0, 0, 0, 0],
@@ -51,12 +40,24 @@ class LaneKalmanFilter():
         self.Q = np.matmul(G.T, G) * sigma_acc**2
     
     def predict(self):
-        self.time_since_update += 1 
         self.x = np.matmul(self.F,self.x)
         self.P = np.matmul(self.F, np.matmul(self.P, self.F.T)) + self.Q
     
-    def set_stat_tran_matrix(self, time_step):
-        pass
+    def set_F_matrix(self, time_step):
+        T = time_step
+        self.F = np.array([[1, T, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 1, T, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 1, T, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 1, T, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 1, T, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, T],
+                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]])
+        return self.F
 
     def step_predict(self, current_time):
         """
@@ -65,12 +66,14 @@ class LaneKalmanFilter():
         y1, Vy1, m1, Vm1, y2, Vy2, m2, Vm2, y3, Vy3, m3, Vm3
         """
         time_step = self.last_call_time - current_time
+        self.set_F_matrix(time_step)
+        self.predict()
         #TODO: set T = timestep in state transition matrix
-        while(time_step > self.dt):
-            time_step -= self.dt
-            self.predict()
-        if (time_step%self.dt > 0):
-            self.predict()
+        # while(time_step > self.dt):
+        #     time_step -= self.dt
+        #     self.predict()
+        # if (time_step%self.dt > 0):
+        #     self.predict()
         self.last_call_time = current_time
 
         return self.x
@@ -91,10 +94,10 @@ class LaneKalmanFilter():
         KH = np.matmul(K, self.H)
         self.P = np.matmul((np.eye(KH.shape[0]) - KH), self.P)
         return self.x
-        
 
 if __name__ == '__main__':
-    lane_tracker = LaneKalmanFilter(0.1)
-    lane_tracker.step_predict(0.1)
+    first_call_time = 0.1
+    lane_tracker = LaneKalmanFilter(first_call_time)
+    lane_tracker.step_predict(1)
     test_measurement = np.array([[3.1],[1.3],[1.5],[2.5], [1.1],[4.3]])
     print (lane_tracker.step_update(test_measurement))

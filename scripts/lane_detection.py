@@ -36,7 +36,7 @@ from delta_perception.msg import LaneMarking, LaneMarkingArray
 
 # Local python modules
 from utils import *
-from erfnet.lane_detection import ERFNetInference
+from erfnet.lane_detection import ERFNetLaneDetector
 from ipm.ipm import InversePerspectiveMapping
 from occupancy_grid import DeltaOccupancyGrid
 
@@ -45,7 +45,7 @@ CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
 EGO_VEHICLE_FRAME = 'ego_vehicle'
 
 # Perception models
-erfnet = ERFNetInference()
+lane_detector = ERFNetLaneDetector()
 ipm = InversePerspectiveMapping()
 occupancy_grid = DeltaOccupancyGrid(30, 100, EGO_VEHICLE_FRAME, resolution=0.2)
 
@@ -64,7 +64,7 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
 
     # Lane detection
     lane_fps.lap()
-    lane_img = erfnet.run(img)
+    output = lane_detector.run(img)
     lane_fps.tick()
 
     # # Fit lines on contours
@@ -110,8 +110,8 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     #     overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
     #     img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
     
-    ipm_img = ipm.transform_image(img)
-    output = erfnet.hough_line_detector(lane_img, ipm_img)
+    # ipm_img = ipm.transform_image(img)
+    # output = lane_detector.hough_line_detector(lane_img, ipm_img)
     cv2_to_message(output, publishers['image_pub'])
 
 
@@ -122,7 +122,7 @@ def callback(image_msg, publishers, **kwargs):
 
 def shutdown_hook():
     print('\n\033[95m' + '*' * 30 + ' Lane Detection Shutdown ' + '*' * 30 + '\033[00m\n')
-    erfnet.close()
+    lane_detector.close()
 
 
 def run(**kwargs):
@@ -135,7 +135,7 @@ def run(**kwargs):
     # rospy.wait_for_message('/delta/perception/segmentation/image', Image)
 
     # Setup models
-    erfnet.setup()
+    lane_detector.setup()
 
     # Handle params and topics
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')

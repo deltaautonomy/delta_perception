@@ -64,11 +64,7 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
 
     # Lane detection
     lane_fps.lap()
-    try:
-        lane_img = erfnet.run(img)
-    except Exception as e:
-        print(e)
-        return
+    lane_img = erfnet.run(img)
     lane_fps.tick()
 
     # # Fit lines on contours
@@ -96,17 +92,17 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     # publishers['lane_pub'].publish(lane_array)
 
     # Convert lane map image to x, y points
-    lane_img = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
-    lane_map = cv2.cvtColor(lane_img, cv2.COLOR_RGB2GRAY)
-    v, u = np.where(lane_map > 0)
-    uv_points = np.stack((u, v)).T
-    points_m = ipm.transform_points_to_m(uv_points)
+    # lane_img = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
+    # lane_map = cv2.cvtColor(lane_img, cv2.COLOR_RGB2GRAY)
+    # v, u = np.where(lane_map > 0)
+    # uv_points = np.stack((u, v)).T
+    # points_m = ipm.transform_points_to_m(uv_points)
 
-    # Convert x, y points to occupancy grid
-    grid = occupancy_grid.empty_grid()
-    for x, y in points_m: grid = occupancy_grid.place([y, -x], 100, grid)
-    grid_msg = occupancy_grid.refresh(grid, image_msg.header.stamp)
-    publishers['occupancy_grid_pub'].publish(grid_msg)
+    # # Convert x, y points to occupancy grid
+    # grid = occupancy_grid.empty_grid()
+    # for x, y in points_m: grid = occupancy_grid.place([y, -x], 100, grid)
+    # grid_msg = occupancy_grid.refresh(grid, image_msg.header.stamp)
+    # publishers['occupancy_grid_pub'].publish(grid_msg)
 
     # Visualize and publish image message
     # if vis:
@@ -114,8 +110,9 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     #     overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
     #     img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
     
-    lane_map = ipm.transform_image(lane_map)
-    cv2_to_message(lane_map, publishers['image_pub'])
+    ipm_img = ipm.transform_image(img)
+    output = erfnet.hough_line_detector(lane_img, ipm_img)
+    cv2_to_message(output, publishers['image_pub'])
 
 
 def callback(image_msg, publishers, **kwargs):

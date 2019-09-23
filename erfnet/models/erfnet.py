@@ -2,6 +2,7 @@
 # Sept 2017
 # Eduardo Romera
 
+from builtins import super
 import torch
 import torch.nn as nn
 import torch.nn.init as init

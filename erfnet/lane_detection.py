@@ -34,6 +34,8 @@ from torchvision import transforms
 
 # Local python modules
 from erfnet.models import ERFNet
+from erfnet.curve_fitting import CurveFit
+from ipm.ipm import InversePerspectiveMapping
 
 
 class ERFNetInference:
@@ -43,15 +45,23 @@ class ERFNetInference:
 
         # Network properties
         self.num_classes = 5
-        self.img_height = 208
-        self.img_width = 976
-        self.dims = (self.img_height, self.img_width)
+        self.img_height = 720
+        self.img_width = 1280
+        self.net_height = 208
+        self.net_width = 976
 
-        # Preprocessing
+        # Pre-processing
         self.input_mean = np.asarray([103.939, 116.779, 123.68])
         self.input_std = np.asarray([1, 1, 1])
-        self.crop_offset = (0, 0)
+        self.top_start = 133
+        self.bot_start = 240
+        self.top_slice = slice(self.top_start, self.top_start + self.net_height)
+        self.bot_slice = slice(self.bot_start, self.bot_start + self.net_height)
         
+        # Post-processing
+        self.lane_exist_thershold = 0.15
+        self.ipm = InversePerspectiveMapping()
+        # self.line_fit = 
 
     def setup(self):
         self.model = ERFNet(self.num_classes)
@@ -73,34 +83,90 @@ class ERFNetInference:
 
     def run(self, img):
         inputs = self.preprocess(img)
+        
         output, output_exist = self.model(inputs)
         output = torch.softmax(output, dim=1)
-        lane_maps = output.data.cpu().numpy().squeeze(0)
+        lane_maps = output.data.cpu().numpy()
         lane_exist = output_exist.data.cpu().numpy()
-        return self.postprocess(lane_maps, lane_exist)
+        
+        postprocessed_map = self.postprocess(lane_maps, lane_exist)
+        output = self.occupancy_map(postprocessed_map)
+        return output
 
     def preprocess(self, img):
-        # Resizing to network height
-        img = cv2.resize(img, None, fx=self.dims[1] / img.shape[1],
-            fy=self.dims[1] / img.shape[1], interpolation=cv2.INTER_LINEAR)
+        # Resizing to network width
+        img = cv2.resize(img, None, fx=self.net_width / self.img_width,
+            fy=self.net_width / self.img_width, interpolation=cv2.INTER_LINEAR)
 
         # Normalization
         img = img - self.input_mean[np.newaxis, np.newaxis, ...]
         img = img / self.input_std[np.newaxis, np.newaxis, ...]
 
         # Cropping to network size
-        diff = int(abs(img.shape[0] - self.dims[0]) / 2) + self.crop_offset[0]
-        img = img[diff:diff + self.dims[0]]
+        img_top = img[self.top_slice].copy()
+        img_bot = img[self.bot_slice].copy()
 
         # Convert to tensor
-        inputs = torch.from_numpy(img).permute(2, 0, 1).contiguous().float().cuda()
-        inputs = torch.unsqueeze(inputs, 0)
-        # todo(heethesh): Perform top/bottom stacking
-        # inputs = torch.cat((inputs, inputs), 0)
+        inputs = np.asarray([img_top, img_bot])
+        inputs = torch.from_numpy(inputs).permute(0, 3, 1, 2).contiguous().float().cuda()
+        # inputs = torch.from_numpy(img_bot).permute(2, 0, 1).contiguous().float().unsqueeze(0).cuda()
         return inputs
 
-    def postprocess(self, lane_maps, lane_exist):
-        return lane_maps[0]
+    def postprocess(self, lane_maps, lane_exist, best_prob=True):
+        # Create blank image
+        output_map = np.zeros((int(self.img_height * self.net_width / self.img_width), self.net_width))
+        
+        # Use lane maps with exist probability > threshold
+        if best_prob:
+            for i in range(1, 5):
+                if lane_exist[0][i - 1] >= self.lane_exist_thershold:
+                    output_map[self.top_slice] += lane_maps[0][i]
+                if lane_exist[1][i - 1] >= self.lane_exist_thershold:
+                    output_map[self.bot_slice] += lane_maps[1][i]
+        # Use background map
+        else:
+            output_map[self.top_slice] += 1 - lane_maps[0][0]
+            output_map[self.bot_slice] += 1 - lane_maps[1][0]
+
+        # Avoid overflow
+        output_map = np.clip(output_map, 0, 1)
+
+        # Resize back to original image size
+        output_map = cv2.resize(output_map, None, fx=self.img_width / self.net_width,
+            fy=self.img_width / self.net_width, interpolation=cv2.INTER_LINEAR)
+        
+        return np.array(output_map * 255, dtype=np.uint8)
+
+    def occupancy_map(self, lane_map):
+        lane_map_bev = self.ipm.transform_image(lane_map)
+        return lane_map_bev
+
+    def hough_line_detector(self, lane_img, ipm_img):
+        canny_lane = cv2.Canny(lane_img, 50, 200, None, 3)
+        canny_ipm = cv2.Canny(ipm_img, 50, 200, None, 3)
+
+        # Copy edges to the images that will display the results in BGR
+        dst = cv2.cvtColor(canny_lane, cv2.COLOR_GRAY2BGR)
+        dst = cv2.cvtColor(canny_ipm, cv2.COLOR_GRAY2BGR)
+
+        # Hough lines
+        lines_lanes = cv2.HoughLinesP(canny_lane, 1, np.pi / 180, 50, None, 50, 10)
+        if lines_lanes is not None:
+            for i in range(0, len(lines_lanes)):
+                l = lines_lanes[i][0]
+                cv2.line(dst, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 3, cv2.LINE_AA)
+
+        lines_ipm = cv2.HoughLinesP(canny_ipm, 1, np.pi / 180, 50, None, 150, 10)
+        if lines_ipm is not None:
+            for i in range(0, len(lines_ipm)):
+                l = lines_ipm[i][0]
+                cv2.line(dst, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 3, cv2.LINE_AA)
+
+        print('\nNew:')
+        print(np.array(lines_lanes))
+        print(np.array(lines_ipm))
+
+        return dst
 
     def close(self):
         pass

@@ -24,19 +24,18 @@ if __name__ == '__main__':
 
     # Handle paths and OpenCV import
     from scripts.init_paths import *
-    from scripts.utils import pil_image
 
 # Run from scripts module
 else:
     # Handle paths and OpenCV import
-    from init_paths import *
-    from utils import pil_image
+    try: from init_paths import *
+    except ImportError: from scripts.init_paths import *
 
 # Built-in modules
 import yaml
 
 # External modules
-from tf.transformations import euler_matrix, translation_matrix
+from transformations import euler_matrix, translation_matrix
 
 
 class InversePerspectiveMapping:

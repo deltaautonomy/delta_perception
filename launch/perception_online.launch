@@ -14,12 +14,12 @@
     </include> -->
 
     <!-- Run the perception pipeline -->
-    <node
+    <!-- <node
         pkg="delta_perception"
         type="main.py"
         name="main"
         output="screen">
-    </node>
+    </node> -->
 
     <!-- Run lane detection -->
     <node
@@ -38,22 +38,32 @@
     </node> -->
 
     <!-- Run inverse_perspective mapping -->
-    <node
+    <!-- <node
         pkg="delta_perception"
         type="ipm_node.py"
         name="ipm_node"
         output="screen">
+    </node> -->
+
+    <!-- Display input image -->
+    <node
+        name="image_view_input"
+        pkg="image_view"
+        type="image_view"
+        respawn="false"
+        output="screen">
+        <remap from="image" to="/carla/ego_vehicle/camera/rgb/front/image_color" />
     </node>
 
     <!-- Display object detection and tracking image -->
-    <node
+    <!-- <node
         name="image_view_object_detection_tracking"
         pkg="image_view"
         type="image_view"
         respawn="false"
         output="screen">
         <remap from="image" to="/delta/perception/object_detection_tracking/image" />
-    </node>
+    </node> -->
 
     <!-- Display lane detection image -->
     <node
@@ -62,11 +72,11 @@
         type="image_view"
         respawn="false"
         output="screen">
-        <remap from="image" to="/delta/perception/ipm/image" />
+        <remap from="image" to="/delta/perception/lane_detection/image" />
     </node>
 
-    <node
+    <!-- <node
         type="rviz" name="rviz" pkg="rviz" args="-d $(find delta_perception)/perception.rviz">
-    </node>
+    </node> -->
 
 </launch>

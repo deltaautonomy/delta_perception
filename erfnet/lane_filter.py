@@ -32,6 +32,10 @@ class LaneKalmanFilter():
                            [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
                            [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
                            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0]])
+        self.H_lane_1 = self.H[:2, :]
+        self.H_lane_2 = self.H[2:4, :]
+        self.H_lane_3 = self.H[4:, :] 
+
         # R is the measurement noise        
         self.R = np.eye(6) * 100.0
         # P is the state transition noise
@@ -80,19 +84,41 @@ class LaneKalmanFilter():
 
         return self.x
 
-    def update_lane1(self, measurement):
+    def update(lane, lane_id):
+        """
+        This function takes lane_x measurement and lane_id information
+        """
+        if lane_id == 'lane_1':
+            self.H_curr = self.H_lane_1
+            self.R_curr = self.R[:2, :2]
+        if lane_id = 'lane_2':
+            self.H_curr = self.H_lane_2
+            self.R_curr = self.R[2:4, 2:4]
+        if lane_id = 'lane_3':
+            self.H_curr = self.lane_3
+            self.R_curr = self.R[4:, 4:]
+        
+        Y = measurement - np.matmul(self.H_curr, self.x)
+        covariance_sum = np.matmul(np.matmul(self.H_curr, self.P), self.H_curr.T) + self.R_curr  
+        K = np.matmul(np.matmul(self.P, self.H_curr.T), np.linalg.pinv(covariance_sum))
+        self.x = self.x + np.matmul(K, Y)
+        KH = np.matmul(K, self.H_curr)
+        self.P = np.matmul((np.eye(KH.shape[0]) - KH), self.P)   
+
+    def update_step(self, lane_1, lane_2, lane_3):
         """
         @param measurements: np array of shape (6, 1) with values of:
         y1, m1, y2, y3, m3
         return x: updated state array of shape (12, 1) with values of:
         y1, Vy1, m1, Vm1, y2, Vy2, m2, Vm2, y3, Vy3, m3, Vm3
         """
-        Y = measurement - np.matmul(self.H, self.x)
-        covariance_sum = np.matmul(np.matmul(self.H, self.P), self.H.T) + self.R
-        K = np.matmul(np.matmul(self.P, self.H.T), np.linalg.pinv(covariance_sum))
-        self.x = self.x + np.matmul(K, Y)
-        KH = np.matmul(K, self.H)
-        self.P = np.matmul((np.eye(KH.shape[0]) - KH), self.P)
+        if lane_1 is not None:
+            self.update(lane_1, lane_id = 'lane_1')
+        if lane_2 is not None:
+            self.update(lane_2, lane_id = 'lane_2')
+        if lane_3 is not None:
+            self.update(lane_3, lane_id = 'lane_3')
+
         return self.x
 
 if __name__ == '__main__':

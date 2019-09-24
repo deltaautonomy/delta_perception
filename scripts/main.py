@@ -47,7 +47,7 @@ from darknet.darknet_video import YOLO
 from ipm.ipm import InversePerspectiveMapping
 from validator.calculate_map import calculate_map
 from cube_marker_publisher import make_cuboid
-from occupancy_grid import DeltaOccupancyGrid
+from occupancy_grid import OccupancyGridGenerator
 
 # Global objects
 STOP_FLAG = False
@@ -69,7 +69,7 @@ VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 yolov3 = YOLO()
 ipm = InversePerspectiveMapping()
 tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
-occupancy_grid = DeltaOccupancyGrid(30, 100, EGO_VEHICLE_FRAME)
+occupancy_grid = OccupancyGridGenerator(30, 100, EGO_VEHICLE_FRAME)
 # tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
 # yolo_validator = ObjectDetectionValidator()
 

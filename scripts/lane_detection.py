@@ -38,7 +38,7 @@ from delta_perception.msg import LaneMarking, LaneMarkingArray
 from utils import *
 from erfnet.lane_detection import ERFNetLaneDetector
 from ipm.ipm import InversePerspectiveMapping
-from occupancy_grid import DeltaOccupancyGrid
+from occupancy_grid import OccupancyGridGenerator
 
 # Frames
 CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
@@ -47,7 +47,7 @@ EGO_VEHICLE_FRAME = 'ego_vehicle'
 # Perception models
 lane_detector = ERFNetLaneDetector()
 ipm = InversePerspectiveMapping()
-occupancy_grid = DeltaOccupancyGrid(30, 100, EGO_VEHICLE_FRAME, resolution=0.2)
+occupancy_grid = OccupancyGridGenerator(30, 100, EGO_VEHICLE_FRAME, resolution=0.2)
 
 # FPS loggers
 FRAME_COUNT = 0
@@ -64,7 +64,7 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
 
     # Lane detection
     lane_fps.lap()
-    output = lane_detector.run(img)
+    output, medians = lane_detector.run(img, rospy.Time.now())
     lane_fps.tick()
 
     # # Fit lines on contours

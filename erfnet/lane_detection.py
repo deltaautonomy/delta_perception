@@ -33,6 +33,7 @@ from pyclustering.cluster.kmedians import kmedians
 from erfnet.models import ERFNet
 from erfnet.curve_fitting import CurveFit
 from ipm.ipm import InversePerspectiveMapping
+from erfnet.lane_filter import LaneKalmanFilter
 
 
 class ERFNetLaneDetector:
@@ -58,7 +59,9 @@ class ERFNetLaneDetector:
         # Post-processing.
         self.lane_exist_thershold = 0.15
         self.ipm = InversePerspectiveMapping()
-        self.kmedians_centroids = np.asarray([[0, 30], [0, 90], [0, 130]])
+        self.kmedians_centroids = np.asarray([[0, 30], [0, 90], [0, 130]], dtype=np.float64)
+        self.first_time = True
+        self.lane_filter = LaneKalmanFilter()
 
     def setup(self):
         self.model = ERFNet(self.num_classes)
@@ -78,7 +81,7 @@ class ERFNetLaneDetector:
         cudnn.benchmark = True
         cudnn.fastest = True
 
-    def run(self, img):
+    def run(self, img, timestamp):
         # Preprocess.
         inputs = self.preprocess(img.copy())
 
@@ -90,7 +93,7 @@ class ERFNetLaneDetector:
 
         # Postprocess.
         postprocessed_map = self.postprocess(lane_maps, lane_exist)
-        output = self.occupancy_map(postprocessed_map, img.copy())
+        output = self.occupancy_map(postprocessed_map, img.copy(), timestamp)
         return output
 
     def preprocess(self, img):
@@ -137,14 +140,14 @@ class ERFNetLaneDetector:
 
         return np.array(output_map * 255, dtype=np.uint8)
 
-    def occupancy_map(self, lane_map, img):
+    def occupancy_map(self, lane_map, img, timestamp):
         # Transform images to BEV.
         ipm_img = self.ipm.transform_image(img)
         ipm_lane = self.ipm.transform_image(lane_map)
         # output = np.zeros_like(ipm_img, dtype=np.uint8)
 
         # Find all lines (n * [x1, y1, x2, y2]).
-        dst, lines = self.hough_line_detector(ipm_lane, ipm_img)
+        dst, lines, n_points = self.hough_line_detector(ipm_lane, ipm_img)
         output = dst
         if lines is None: return output
 
@@ -157,6 +160,7 @@ class ERFNetLaneDetector:
 
         # Create instance of K-Medians algorithm.
         initial_medians = self.kmedians_centroids
+        initial_medians[:, 0] = [np.mean(slopes)] * 3
         kmedians_instance = kmedians(data, initial_medians)
 
         # Run cluster analysis and obtain results.
@@ -165,6 +169,17 @@ class ERFNetLaneDetector:
         medians = np.asarray(kmedians_instance.get_medians())
         median_slope = np.median(medians[:, 0])
 
+        # Kalman filter initialization.
+        if self.first_time:
+            self.first_time = False
+            self.lane_filter.initialize_filter(timestamp.to_sec(), medians)
+
+        # Kalman filter predict/update.
+        self.lane_filter.predict_step(timestamp.to_sec())
+        if not self.first_time:
+            medians = self.lane_filter.update_step(medians.flatten())
+            medians = medians.reshape(6, 2)[:, 0].reshape(3, 2)
+
         # Visualize lines on image.
         colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]
         for (slope, intercept), color in zip(medians, colors):
@@ -172,36 +187,36 @@ class ERFNetLaneDetector:
             y = ((median_slope * x) + intercept).astype('int')
             cv2.line(output, (y[0], x[0]), (y[1], x[1]), color, 3, cv2.LINE_AA)
 
-        return output
+        return output, medians
 
     def hough_line_detector(self, ipm_lane, ipm_img):
         canny_lane = cv2.Canny(ipm_lane, 50, 200, None, 3)
         canny_ipm = cv2.Canny(ipm_img, 50, 200, None, 3)
 
         # Copy edges to the images that will display the results in BGR.
-        # dst = cv2.cvtColor(canny_lane, cv2.COLOR_GRAY2BGR)
-        dst = cv2.cvtColor(canny_ipm, cv2.COLOR_GRAY2BGR)
+        dst = cv2.cvtColor(canny_lane, cv2.COLOR_GRAY2BGR)
+        # dst = cv2.cvtColor(canny_ipm, cv2.COLOR_GRAY2BGR)
 
         # Probabilistic ough lines detector.
         lines_lanes = cv2.HoughLinesP(canny_lane, 1, np.pi / 180, 50, None, 50, 10)
         if lines_lanes is not None:
             lines_lanes = lines_lanes.squeeze(1)
-            # for i in range(0, len(lines_lanes)):
-            #     l = lines_lanes[i]
-            #     cv2.line(dst, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 3, cv2.LINE_AA)
+            for i in range(0, len(lines_lanes)):
+                l = lines_lanes[i]
+                cv2.line(dst, (l[0], l[1]), (l[2], l[3]), (0, 255, 255), 1, cv2.LINE_AA)
 
         lines_ipm = cv2.HoughLinesP(canny_ipm, 1, np.pi / 180, 50, None, 150, 10)
         if lines_ipm is not None:
             lines_ipm = lines_ipm.squeeze(1)
-            # for i in range(0, len(lines_ipm)):
-            #     l = lines_ipm[i]
-            #     cv2.line(dst, (l[0], l[1]), (l[2], l[3]), (0, 255, 0), 3, cv2.LINE_AA)
+            for i in range(0, len(lines_ipm)):
+                l = lines_ipm[i]
+                cv2.line(dst, (l[0], l[1]), (l[2], l[3]), (255, 255, 0), 1, cv2.LINE_AA)
 
         # Handle no line detections.
-        if lines_lanes is None and lines_ipm is None: return dst, None
-        elif lines_lanes is None: return dst, lines_ipm
-        elif lines_ipm is None: return dst, lines_lanes
-        else: return dst, np.r_[lines_lanes, lines_ipm]
+        if lines_lanes is None and lines_ipm is None: return dst, None, (0, 0)
+        elif lines_lanes is None: return dst, lines_ipm, (0, len(lines_ipm))
+        elif lines_ipm is None: return dst, lines_lanes, (len(lines_lanes), 0)
+        else: return dst, np.r_[lines_lanes, lines_ipm], (len(lines_lanes), len(lines_ipm))
 
     def close(self):
         pass

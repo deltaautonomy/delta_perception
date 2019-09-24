@@ -32,7 +32,7 @@ class OccupancyGridGenerator(object):
         self.info.height = int(range_x / self.info.resolution)  # Meters
         self.info.width = int(range_y / self.info.resolution)  # Meters
         self.x_offset = range_x / 2  # Center left-right about ego vehicle
-        self.info.origin = numpy_to_position([0, -self.x_offset, -0.5], Pose())
+        self.info.origin = self.numpy_to_position([0, -self.x_offset, -0.5], Pose())
 
         self.occupancy_grid = OccupancyGrid()
         self.occupancy_grid.info = self.info
@@ -50,6 +50,12 @@ class OccupancyGridGenerator(object):
         self.meshgrid = np.empty(X.shape + (2,))
         self.meshgrid[:, :, 0] = X
         self.meshgrid[:, :, 1] = Y
+
+    def numpy_to_position(self, numpy_pos, position):
+        position.position.x = numpy_pos[0]
+        position.position.y = numpy_pos[1]
+        position.position.z = numpy_pos[2]
+        return position
 
     def empty_grid(self):
         return np.zeros((self.info.height, self.info.width), dtype=np.int8)

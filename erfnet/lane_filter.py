@@ -1,20 +1,21 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 # Python 2/3 compatibility
 from __future__ import print_function, absolute_import, division
 
+# External modules
 import numpy as np
 
+
 class LaneKalmanFilter():
-    def __init__(self, state_dim=12, measurement_dim=6, motion_model='velocity'):
+    def __init__(self):
         """
         Initializes the kalman filter class 
-        @param: state_dim - number of states
-        @param: measurement_dim - number of observations returned by erfnet
-        @param: dt - timestep at which the vehicle state should update
         """
-        self.state_dim = state_dim
-        self.measurement_dim = measurement_dim
-        self.motion_model = motion_model
-    
+        self.state_dim = 12
+        self.measurement_dim = 6
+
     def initialize_filter(self, first_call_time, measurement):
         """
         Internal function to initialize the filter
@@ -23,7 +24,7 @@ class LaneKalmanFilter():
         m = measurement.flatten()
         self.x = np.c_[m, np.zeros_like(m)].flatten()
         assert len(self.x) == self.state_dim, 'State dim does not match'
-        # state transition matrix
+        # State transition matrix
         self.F = np.zeros([12, 12])
         # H is how we go from state variable to measurement variable
         self.H = np.array([[1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -42,14 +43,14 @@ class LaneKalmanFilter():
         self.P = np.eye(12) * 500.0
         # Q is the process covariance
         self.last_call_time = first_call_time
-    
+
     def predict(self, current_time, sigma_acc=8.8):
         T = current_time - self.last_call_time
         G = np.array([0.5 * T ** 2, T, 0.5 * T ** 2, T])
         self.Q = np.matmul(G.T, G) * sigma_acc ** 2
         self.x = np.matmul(self.F,self.x)
         self.P = np.matmul(self.F, np.matmul(self.P, self.F.T)) + self.Q
-    
+
     def set_F_matrix(self, T):
         self.F = np.array([[1, T, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                            [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -69,62 +70,48 @@ class LaneKalmanFilter():
         """
         @param time_step: time since last update has been called 
         return x: predicted state array of shape (12, 1) with values of:
-        y1, Vy1, m1, Vm1, y2, Vy2, m2, Vm2, y3, Vy3, m3, Vm3
+        [y1, vy1, m1, vm1, y2, vy2, m2, vm2, y3, vy3, m3, vm3]
         """
         time_step = current_time - self.last_call_time
         self.set_F_matrix(time_step)
         self.predict(current_time)
-        #TODO: set T = timestep in state transition matrix
-        # while(time_step > self.dt):
-        #     time_step -= self.dt
-        #     self.predict()
-        # if (time_step%self.dt > 0):
-        #     self.predict()
         self.last_call_time = current_time
 
         return self.x
 
     def update(lane, lane_id):
         """
-        This function takes lane_x measurement and lane_id information
+        This function takes lane measurement and lane_id information
         """
-        if lane_id == 'lane_1':
-            self.H_curr = self.H_lane_1
-            self.R_curr = self.R[:2, :2]
-        if lane_id = 'lane_2':
-            self.H_curr = self.H_lane_2
-            self.R_curr = self.R[2:4, 2:4]
-        if lane_id = 'lane_3':
-            self.H_curr = self.lane_3
-            self.R_curr = self.R[4:, 4:]
-        
-        Y = measurement - np.matmul(self.H_curr, self.x)
-        covariance_sum = np.matmul(np.matmul(self.H_curr, self.P), self.H_curr.T) + self.R_curr  
-        K = np.matmul(np.matmul(self.P, self.H_curr.T), np.linalg.pinv(covariance_sum))
+        if lane_id == 1:
+            H_curr = self.H_lane_1
+            R_curr = self.R[:2, :2]
+        if lane_id == 2:
+            H_curr = self.H_lane_2
+            R_curr = self.R[2:4, 2:4]
+        if lane_id == 3:
+            H_curr = self.H_lane_3
+            R_curr = self.R[4:, 4:]
+
+        Y = measurement - np.matmul(H_curr, self.x)
+        covariance_sum = np.matmul(np.matmul(H_curr, self.P), H_curr.T) + R_curr  
+        K = np.matmul(np.matmul(self.P, H_curr.T), np.linalg.pinv(covariance_sum))
         self.x = self.x + np.matmul(K, Y)
-        KH = np.matmul(K, self.H_curr)
+        KH = np.matmul(K, H_curr)
         self.P = np.matmul((np.eye(KH.shape[0]) - KH), self.P)   
 
-    def update_step(self, lane_1, lane_2, lane_3):
+    def update_step(self, z_lane_1=None, z_lane_2=None, z_lane_3=None):
         """
-        @param measurements: np array of shape (6, 1) with values of:
-        y1, m1, y2, y3, m3
+        @param measurements: np array of shape (2, 1) with values of:
+        [y1, m1], [y2, m2], [y3, m3]
         return x: updated state array of shape (12, 1) with values of:
-        y1, Vy1, m1, Vm1, y2, Vy2, m2, Vm2, y3, Vy3, m3, Vm3
+        [y1, vy1, m1, vm1, y2, vy2, m2, vm2, y3, vy3, m3, vm3]
         """
-        if lane_1 is not None:
-            self.update(lane_1, lane_id = 'lane_1')
-        if lane_2 is not None:
-            self.update(lane_2, lane_id = 'lane_2')
-        if lane_3 is not None:
-            self.update(lane_3, lane_id = 'lane_3')
+        if z_lane_1 is not None:
+            self.update(z_lane_1, lane_id=1)
+        if z_lane_2 is not None:
+            self.update(z_lane_2, lane_id=2)
+        if z_lane_3 is not None:
+            self.update(z_lane_3, lane_id=3)
 
         return self.x
-
-if __name__ == '__main__':
-    first_call_time = 0.1
-    lane_tracker = LaneKalmanFilter()
-    lane_tracker.initialize_filter(first_call_time)
-    lane_tracker.predict_step(0.2)
-    test_measurement = np.array([[3.1],[1.3],[1.5],[2.5], [1.1],[4.3]])
-    print(lane_tracker.update_step(test_measurement))

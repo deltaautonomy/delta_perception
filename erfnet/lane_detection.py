@@ -27,13 +27,14 @@ else:
 # External modules
 import torch
 import torch.backends.cudnn as cudnn
+from scipy.spatial import distance
+from scipy.optimize import linear_sum_assignment
 from pyclustering.cluster.kmedians import kmedians
 
 # Local python modules
 from erfnet.models import ERFNet
-from erfnet.curve_fitting import CurveFit
-from ipm.ipm import InversePerspectiveMapping
 from erfnet.lane_filter import LaneKalmanFilter
+from ipm.ipm import InversePerspectiveMapping
 
 
 class ERFNetLaneDetector:
@@ -55,7 +56,7 @@ class ERFNetLaneDetector:
         self.bot_start = 240
         self.top_slice = slice(self.top_start, self.top_start + self.net_height)
         self.bot_slice = slice(self.bot_start, self.bot_start + self.net_height)
-        
+
         # Post-processing.
         self.lane_exist_thershold = 0.15
         self.ipm = InversePerspectiveMapping()
@@ -140,15 +141,21 @@ class ERFNetLaneDetector:
 
         return np.array(output_map * 255, dtype=np.uint8)
 
+    def associate_lanes(self, medians, pred_medians):
+        association = [None] * 3
+        cost = distance.cdist(np.expand_dims(pred_medians[:, 1], 1), np.expand_dims(medians[:, 1], 1))
+        idx_a, idx_b = linear_sum_assignment(cost)
+        for i, j in zip(idx_a, idx_b): association[i] = medians[j]
+        return association
+
     def occupancy_map(self, lane_map, img, timestamp):
         # Transform images to BEV.
         ipm_img = self.ipm.transform_image(img)
         ipm_lane = self.ipm.transform_image(lane_map)
-        # output = np.zeros_like(ipm_img, dtype=np.uint8)
+        output = np.zeros_like(ipm_img, dtype=np.uint8)
 
         # Find all lines (n * [x1, y1, x2, y2]).
         dst, lines, n_points = self.hough_line_detector(ipm_lane, ipm_img)
-        output = dst
         if lines is None: return output
 
         # Compute slope and intercept of all lines.
@@ -172,12 +179,14 @@ class ERFNetLaneDetector:
         # Kalman filter initialization.
         if self.first_time:
             self.first_time = False
+            assert len(medians) == 3, 'Initialization requires medians for all lanes'
             self.lane_filter.initialize_filter(timestamp.to_sec(), medians)
 
         # Kalman filter predict/update.
-        self.lane_filter.predict_step(timestamp.to_sec())
+        pred_medians = self.lane_filter.predict_step(timestamp.to_sec())
+        lanes = self.associate_lanes(medians, pred_medians)
         if not self.first_time:
-            medians = self.lane_filter.update_step(medians.flatten())
+            medians = self.lane_filter.update_step(lanes[0], lanes[1], lanes[2])
             medians = medians.reshape(6, 2)[:, 0].reshape(3, 2)
 
         # Visualize lines on image.
@@ -224,15 +233,21 @@ class ERFNetLaneDetector:
 
 if __name__ == '__main__':
     erfnet = ERFNetLaneDetector()
-    erfnet.setup()
+    # erfnet.setup()
 
-    cv2.namedWindow('Test Output', cv2.WINDOW_NORMAL)
-    cv2.resizeWindow('Test Output', (640, 360))
-    cv2.moveWindow('Test Output', 100, 300)
+    # cv2.namedWindow('Test Output', cv2.WINDOW_NORMAL)
+    # cv2.resizeWindow('Test Output', (640, 360))
+    # cv2.moveWindow('Test Output', 100, 300)
 
-    img = cv2.imread(sys.argv[1])
-    output = erfnet.run(img)
+    # img = cv2.imread(sys.argv[1])
+    # output = erfnet.run(img)
 
-    cv2.imshow('Test Output', output)
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # cv2.imshow('Test Output', output)
+    # cv2.waitKey(0)
+    # cv2.destroyAllWindows()
+
+    # Test lane association
+    # medians = np.array([[0, 30], [0, 110], [0, 60]])
+    medians = np.array([[0, 30], [0, 140]])
+    pred_medians = np.array([[0, 30], [0, 60], [0, 130]])
+    print(erfnet.associate_lanes(medians, pred_medians))

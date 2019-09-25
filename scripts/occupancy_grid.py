@@ -82,7 +82,9 @@ class OccupancyGridGenerator(object):
         return grid
 
     def normalize(self, x):
+        if np.max(x) == np.min(x): return x
         return (x - np.min(x)) / (np.max(x) - np.min(x))
+        # return cv2.normalize(x, None, 0, 100, cv2.NORM_MINMAX, cv2.CV_8U)
 
     def place_gaussian(self, mean, cov, value, grid):
         """

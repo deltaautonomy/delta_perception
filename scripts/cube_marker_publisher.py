@@ -22,7 +22,7 @@ from visualization_msgs.msg import Marker
 
 
 def make_label(text, position, frame_id='/map', marker_id=0,
-    duration=0, color=[1.0, 1.0, 1.0]):
+    duration=0.5, color=[1.0, 1.0, 1.0]):
     """ 
     Helper function for generating visualization markers
     
@@ -43,9 +43,9 @@ def make_label(text, position, frame_id='/map', marker_id=0,
     marker.type = marker.TEXT_VIEW_FACING
     marker.text = text
     marker.action = marker.ADD
-    marker.scale.x = 0.05
-    marker.scale.y = 0.05
-    marker.scale.z = 0.05
+    marker.scale.x = 1.0
+    marker.scale.y = 1.0
+    marker.scale.z = 1.0
     marker.color.a = 1.0
     marker.color.r = color[0]
     marker.color.g = color[1]

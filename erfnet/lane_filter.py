@@ -79,7 +79,7 @@ class LaneKalmanFilter():
 
         return self.x
 
-    def update(lane, lane_id):
+    def update(self, measurement, lane_id):
         """
         This function takes lane measurement and lane_id information
         """

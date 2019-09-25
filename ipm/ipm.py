@@ -62,6 +62,7 @@ class InversePerspectiveMapping:
         else:
             print('Loading calibration data from file...')
             self.ipm_matrix = np.asarray(self.info['calibration']['ipm_matrix']).reshape(3, 3)
+            self.ipm_matrix_inv = np.linalg.inv(self.ipm_matrix)
             self.ipm_image_dims = tuple(self.info['calibration']['ipm_image_dims'][::-1])
             self.ipm_px_to_m = self.info['calibration']['ipm_px_to_m']
             self.ipm_m_to_px = self.info['calibration']['ipm_m_to_px']
@@ -76,20 +77,21 @@ class InversePerspectiveMapping:
         img = cv2.warpPerspective(img, self.ipm_matrix, self.ipm_image_dims)
         return img
 
-    def transform_points_to_px(self, points, squeeze=True):
+    def transform_points_to_px(self, points, squeeze=True, inverse=False):
         ones = np.ones((len(points), 1))
         if len(np.array(points).shape) == 1:
             points = np.expand_dims(points, axis=0)
             ones = np.array([[1]])
 
-        points_px = np.matmul(self.ipm_matrix, np.hstack([points, ones]).T)
+        H = self.ipm_matrix_inv if inverse else self.ipm_matrix
+        points_px = np.matmul(H, np.hstack([points, ones]).T)
         points_px = points_px / points_px[-1]
 
         if squeeze: return points_px.T[:, :2].squeeze()
         return points_px.T[:, :2]
 
-    def transform_points_to_m(self, points):
-        points_px = self.transform_points_to_px(points, squeeze=False)
+    def transform_points_to_m(self, points, inverse=False):
+        points_px = self.transform_points_to_px(points, squeeze=False, inverse=inverse)
         points_px[:, 0] = points_px[:, 0] - self.ipm_image_dims[0] / 2
         points_px[:, 1] = self.ipm_image_dims[1] - points_px[:, 1]
 
@@ -97,3 +99,16 @@ class InversePerspectiveMapping:
         points_m[:, 1] += self.calibration_ego_y
 
         return points_m.squeeze()
+
+
+if __name__ == '__main__':
+    ipm = InversePerspectiveMapping()
+    img = np.zeros((720, 1280))
+    print(ipm.transform_image(img).shape)
+    points = np.array([[  0,  28],
+     [869,  42],
+     [  0,  80],
+     [869,  93],
+     [  0, 127],
+     [869, 140]])
+    print(ipm.transform_points_to_px(np.fliplr(points), inverse=True))

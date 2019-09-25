@@ -152,16 +152,15 @@ class ERFNetLaneDetector:
         # Transform images to BEV.
         ipm_img = self.ipm.transform_image(img)
         ipm_lane = self.ipm.transform_image(lane_map)
-        output = np.zeros_like(ipm_img, dtype=np.uint8)
+        # output = ipm_img # np.zeros_like(ipm_img, dtype=np.uint8)
+        output = img # np.zeros_like(ipm_img, dtype=np.uint8)
 
         # Find all lines (n * [x1, y1, x2, y2]).
         dst, lines, n_points = self.hough_line_detector(ipm_lane, ipm_img)
         if lines is None: return output
 
         # Compute slope and intercept of all lines.
-        diff_x = np.abs(lines[:, 3] - lines[:, 1])
-        diff_y = np.abs(lines[:, 2] - lines[:, 0])
-        slopes = np.arctan2(diff_y, diff_x)
+        slopes = (lines[:, 2] - lines[:, 0]) / (lines[:, 3] - lines[:, 1])
         intercepts = np.mean(np.c_[lines[:, 0], lines[:, 2]], axis=1)
         data = np.c_[slopes, intercepts]
 
@@ -184,6 +183,7 @@ class ERFNetLaneDetector:
 
         # Kalman filter predict/update.
         pred_medians = self.lane_filter.predict_step(timestamp.to_sec())
+        pred_medians = pred_medians.reshape(6, 2)[:, 0].reshape(3, 2)
         lanes = self.associate_lanes(medians, pred_medians)
         if not self.first_time:
             medians = self.lane_filter.update_step(lanes[0], lanes[1], lanes[2])
@@ -191,11 +191,26 @@ class ERFNetLaneDetector:
 
         # Visualize lines on image.
         colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]
+        points_ipm = []
         for (slope, intercept), color in zip(medians, colors):
             x = np.array([0, ipm_img.shape[0] - 1]).astype('int')
             y = ((median_slope * x) + intercept).astype('int')
+            points_ipm.append(np.c_[y, x])
             cv2.line(output, (y[0], x[0]), (y[1], x[1]), color, 3, cv2.LINE_AA)
+        points_ipm = np.vstack(points_ipm)
 
+        # Convert points from IPM to image coordinates.
+        points_img = self.ipm.transform_points_to_px(points_ipm, inverse=True)
+        points_img = points_img.reshape(3, 4)
+
+        # Draw polygons on lanes.
+        poly_img = np.zeros_like(img, dtype=np.uint8)
+        for i in range(len(points_img) - 1):
+            poly_points = np.vstack([points_img[i].reshape(2, 2), points_img[i + 1].reshape(2, 2)])
+            poly_points = cv2.convexHull(poly_points.astype('int'))
+            cv2.fillConvexPoly(poly_img, poly_points, colors[i])
+
+        output = cv2.addWeighted(poly_img, 0.5, img, 1.0, 0)
         return output, medians
 
     def hough_line_detector(self, ipm_lane, ipm_img):

@@ -1,4 +1,2 @@
-float32 xbot
-float32 ybot
-float32 xtop
-float32 ytop
+float64 slope
+float64 intercept

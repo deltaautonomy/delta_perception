@@ -10,24 +10,24 @@
     </include> -->
 
     <!-- Run ego-vehicle prediction -->
-    <!-- <include file="$(find delta_prediction)/launch/ego_vehicle_prediction.launch">
-    </include> -->
+    <include file="$(find delta_prediction)/launch/ego_vehicle_prediction.launch">
+    </include>
 
     <!-- Run the perception pipeline -->
-    <!-- <node
+    <node
         pkg="delta_perception"
         type="main.py"
         name="main"
         output="screen">
-    </node> -->
+    </node>
 
     <!-- Run lane detection -->
-    <node
+    <!-- <node
         pkg="delta_perception"
         type="lane_detection.py"
         name="lane_detection"
         output="screen">
-    </node>
+    </node> -->
 
     <!-- Run semantic segmentation -->
     <!-- <node
@@ -46,24 +46,24 @@
     </node> -->
 
     <!-- Display input image -->
-    <node
+    <!-- <node
         name="image_view_input"
         pkg="image_view"
         type="image_view"
         respawn="false"
         output="screen">
         <remap from="image" to="/carla/ego_vehicle/camera/rgb/front/image_color" />
-    </node>
+    </node> -->
 
     <!-- Display object detection and tracking image -->
-    <!-- <node
+    <node
         name="image_view_object_detection_tracking"
         pkg="image_view"
         type="image_view"
         respawn="false"
         output="screen">
         <remap from="image" to="/delta/perception/object_detection_tracking/image" />
-    </node> -->
+    </node>
 
     <!-- Display lane detection image -->
     <node

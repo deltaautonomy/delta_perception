@@ -52,13 +52,13 @@ class ERFNetLaneDetector:
         # Pre-processing.
         self.input_mean = np.asarray([103.939, 116.779, 123.68])
         self.input_std = np.asarray([1, 1, 1])
-        self.top_start = 133
-        self.bot_start = 240
+        self.top_start = 100
+        self.bot_start = 150
         self.top_slice = slice(self.top_start, self.top_start + self.net_height)
         self.bot_slice = slice(self.bot_start, self.bot_start + self.net_height)
 
         # Post-processing.
-        self.lane_exist_thershold = 0.15
+        self.lane_exist_thershold = 0.3
         self.ipm = InversePerspectiveMapping()
         self.kmedians_centroids = np.asarray([[0, 30], [0, 90], [0, 130]], dtype=np.float64)
         self.first_time = True
@@ -149,11 +149,12 @@ class ERFNetLaneDetector:
         return association
 
     def occupancy_map(self, lane_map, img, timestamp):
+        # return lane_map, None
         # Transform images to BEV.
         ipm_img = self.ipm.transform_image(img)
         ipm_lane = self.ipm.transform_image(lane_map)
-        # output = ipm_img # np.zeros_like(ipm_img, dtype=np.uint8)
-        output = img # np.zeros_like(ipm_img, dtype=np.uint8)
+        output = ipm_img # np.zeros_like(ipm_img, dtype=np.uint8)
+        # output = img # np.zeros_like(ipm_img, dtype=np.uint8)
 
         # Find all lines (n * [x1, y1, x2, y2]).
         dst, lines, n_points = self.hough_line_detector(ipm_lane, ipm_img)
@@ -202,15 +203,16 @@ class ERFNetLaneDetector:
         # Convert points from IPM to image coordinates.
         points_img = self.ipm.transform_points_to_px(points_ipm, inverse=True)
         points_img = points_img.reshape(3, 4)
+        points_ipm = points_ipm.reshape(3, 4)
 
         # Draw polygons on lanes.
-        poly_img = np.zeros_like(img, dtype=np.uint8)
-        for i in range(len(points_img) - 1):
-            poly_points = np.vstack([points_img[i].reshape(2, 2), points_img[i + 1].reshape(2, 2)])
+        poly_img = np.zeros_like(output, dtype=np.uint8)
+        for i in range(len(points_ipm) - 1):
+            poly_points = np.vstack([points_ipm[i].reshape(2, 2), points_ipm[i + 1].reshape(2, 2)])
             poly_points = cv2.convexHull(poly_points.astype('int'))
             cv2.fillConvexPoly(poly_img, poly_points, colors[i])
 
-        output = cv2.addWeighted(poly_img, 0.5, img, 1.0, 0)
+        output = cv2.addWeighted(poly_img, 0.5, output, 1.0, 0)
         return output, medians
 
     def hough_line_detector(self, ipm_lane, ipm_img):

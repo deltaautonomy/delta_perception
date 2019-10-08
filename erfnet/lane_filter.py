@@ -38,9 +38,9 @@ class LaneKalmanFilter():
         self.H_lane_3 = self.H[4:, :] 
 
         # R is the measurement noise        
-        self.R = np.eye(6) * 100.0
+        self.R = np.eye(6) * 0.5
         # P is the state transition noise
-        self.P = np.eye(12) * 500.0
+        self.P = np.eye(12) * 10.0
         # Q is the process covariance
         self.last_call_time = first_call_time
 

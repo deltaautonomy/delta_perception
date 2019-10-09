@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <!-- Run semantic segmentation -->
+    <node
+        pkg="delta_perception"
+        type="segmentation.py"
+        name="segmentation"
+        output="screen">
+    </node>
+
+    <!-- Display lane detection image -->
+    <node
+        name="image_view_segmentation"
+        pkg="image_view"
+        type="image_view"
+        respawn="false"
+        output="screen">
+        <remap from="image" to="/delta/perception/segmentation/image" />
+    </node>
+</launch>

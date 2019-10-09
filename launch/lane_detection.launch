@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <!-- Run the lane detection node -->
+    <node
+        pkg="delta_perception"
+        type="lane_detection.py"
+        name="lane_detection"
+        output="screen">
+    </node>
+
+    <!-- Display lane detection image -->
+    <node
+        name="image_view_lane_detection"
+        pkg="image_view"
+        type="image_view"
+        respawn="false"
+        output="screen">
+        <remap from="image" to="/delta/perception/lane_detection/image" />
+    </node>
+</launch>

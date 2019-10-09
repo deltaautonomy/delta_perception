@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<launch>
+    <!-- Run the object detection node -->
+    <node
+        pkg="delta_perception"
+        type="main.py"
+        name="main"
+        output="screen">
+    </node>
+
+    <!-- Display object detection and tracking image -->
+    <node
+        name="image_view_object_detection"
+        pkg="image_view"
+        type="image_view"
+        respawn="false"
+        output="screen">
+        <remap from="image" to="/delta/perception/object_detection/image" />
+    </node>
+</launch>

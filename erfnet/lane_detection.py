@@ -200,6 +200,12 @@ class ERFNetLaneDetector:
             cv2.line(output, (y[0], x[0]), (y[1], x[1]), color, 3, cv2.LINE_AA)
         points_ipm = np.vstack(points_ipm)
 
+        # Convert data to meters.
+        points_m = self.ipm.transform_points_to_m(points_ipm, transform=False)
+        points_m = points_m.reshape(3, 4)
+        slopes_m = (points_m[:, 2] - points_m[:, 0]) / (points_m[:, 3] - points_m[:, 1])
+        lane_data_m = np.c_[slopes_m, points_m[:, 0]]
+
         # Convert points from IPM to image coordinates.
         points_img = self.ipm.transform_points_to_px(points_ipm, inverse=True)
         points_img = points_img.reshape(3, 4)
@@ -213,7 +219,7 @@ class ERFNetLaneDetector:
             cv2.fillConvexPoly(poly_img, poly_points, colors[i])
 
         output = cv2.addWeighted(poly_img, 0.5, output, 1.0, 0)
-        return output, medians
+        return output, lane_data_m
 
     def hough_line_detector(self, ipm_lane, ipm_img):
         canny_lane = cv2.Canny(ipm_lane, 50, 200, None, 3)
@@ -223,7 +229,7 @@ class ERFNetLaneDetector:
         dst = cv2.cvtColor(canny_lane, cv2.COLOR_GRAY2BGR)
         # dst = cv2.cvtColor(canny_ipm, cv2.COLOR_GRAY2BGR)
 
-        # Probabilistic ough lines detector.
+        # Probabilistic hough lines detector.
         lines_lanes = cv2.HoughLinesP(canny_lane, 1, np.pi / 180, 50, None, 50, 10)
         if lines_lanes is not None:
             lines_lanes = lines_lanes.squeeze(1)

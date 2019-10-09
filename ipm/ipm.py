@@ -90,8 +90,8 @@ class InversePerspectiveMapping:
         if squeeze: return points_px.T[:, :2].squeeze()
         return points_px.T[:, :2]
 
-    def transform_points_to_m(self, points, inverse=False):
-        points_px = self.transform_points_to_px(points, squeeze=False, inverse=inverse)
+    def transform_points_to_m(self, points, inverse=False, transform=True):
+        points_px = self.transform_points_to_px(points, squeeze=False, inverse=inverse) if transform else points
         points_px[:, 0] = points_px[:, 0] - self.ipm_image_dims[0] / 2
         points_px[:, 1] = self.ipm_image_dims[1] - points_px[:, 1]
 

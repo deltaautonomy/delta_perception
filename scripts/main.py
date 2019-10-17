@@ -180,7 +180,7 @@ def validate(image, objects, detections, image_pub, **kwargs):
             f.write(text)
 
 
-def visualize(img, tracked_targets, detections, radar_targets, publishers, **kwargs):
+def visualize(img, tracked_targets, detections, publishers, **kwargs):
     # Draw visualizations
     # img = YOLO.cvDrawBoxes(detections, img)
     # img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -195,18 +195,18 @@ def visualize(img, tracked_targets, detections, radar_targets, publishers, **kwa
             (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 1, color, 3)
 
     # Project the radar points on the image
-    for track_id, uv, pos, vel in radar_targets:
-        uv = np.asarray(uv).flatten().tolist()
-        cv2.circle(img, tuple(uv), 10, (0, 0, 255), 3)
-        cv2.putText(img, '[P: %.2fm]' % (pos[0]),
-            tuple(uv), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
-        cv2.putText(img, '[V: %.2fKm/h]' % (vel * 3.6), 
-            (uv[0], uv[1] + 15), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
+    # for track_id, uv, pos, vel in radar_targets:
+    #     uv = np.asarray(uv).flatten().tolist()
+    #     cv2.circle(img, tuple(uv), 10, (0, 0, 255), 3)
+    #     cv2.putText(img, '[P: %.2fm]' % (pos[0]),
+    #         tuple(uv), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
+    #     cv2.putText(img, '[V: %.2fKm/h]' % (vel * 3.6), 
+    #         (uv[0], uv[1] + 15), cv2.FONT_HERSHEY_PLAIN, 1, (0, 255, 0), 2)
 
-        # Publish radar track marker for debugging.
-        radar_marker = make_cuboid(position=pos, scale=[0.5] * 3,
-            frame_id=RADAR_FRAME, marker_id=track_id, duration=0.5, color=[1, 0, 0])
-        publishers['radar_marker_pub'].publish(radar_marker)
+    #     # Publish radar track marker for debugging.
+    #     radar_marker = make_cuboid(position=pos, scale=[0.5] * 3,
+    #         frame_id=RADAR_FRAME, marker_id=track_id, duration=0.5, color=[1, 0, 0])
+    #     publishers['radar_marker_pub'].publish(radar_marker)
 
     cv2_to_message(img, publishers['image_pub'])
 
@@ -268,7 +268,7 @@ def publish_occupancy_grid(publishers, tracked_targets, radar_msg):
     publishers['occupancy_grid_pub'].publish(grid_msg)
 
 
-def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
+def perception_pipeline(img, publishers, vis=True, **kwargs):
     # Log pipeline FPS
     all_fps.lap()
 
@@ -287,14 +287,14 @@ def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
     sort_fps.tick()
 
     # Publish camera tracks
-    publish_camera_tracks(publishers, tracked_targets,
-        detections, radar_msg.header.stamp)
+    # publish_camera_tracks(publishers, tracked_targets,
+    #     detections, radar_msg.header.stamp)
 
     # RADAR tracking
-    radar_targets = get_radar_targets(radar_msg)
+    # radar_targets = get_radar_targets(radar_msg)
 
     # Publish occupancy grid
-    publish_occupancy_grid(publishers, tracked_targets, radar_msg)
+    # publish_occupancy_grid(publishers, tracked_targets, radar_msg)
 
     # Display FPS logger status
     all_fps.tick()
@@ -303,12 +303,12 @@ def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
     sys.stdout.flush()
 
     # Visualize and publish image message
-    if vis: visualize(img, tracked_targets, detections, radar_targets, publishers)
+    if vis: visualize(img, tracked_targets, detections, publishers)
 
     return detections
 
 
-def perception_callback(image_msg, radar_msg, objects, publishers, **kwargs):
+def perception_callback(image_msg, publishers, **kwargs):
     # Node stop has been requested
     if STOP_FLAG: return
 
@@ -319,10 +319,10 @@ def perception_callback(image_msg, radar_msg, objects, publishers, **kwargs):
         sys.exit(1)
 
     # Run the perception pipeline
-    detections = perception_pipeline(img.copy(), radar_msg, publishers)
+    detections = perception_pipeline(img.copy(), publishers)
 
     # Run the validation pipeline
-    validate(img.copy(), objects, detections, publishers['image_pub'])
+    # validate(img.copy(), objects, detections, publishers['image_pub'])
 
 
 def shutdown_hook():
@@ -331,7 +331,7 @@ def shutdown_hook():
     time.sleep(3)
     print('\n\033[95m' + '*' * 30 + ' Delta Perception Shutdown ' + '*' * 30 + '\033[00m\n')
     print('\n\033[95m' + '*' * 30 + ' Calculating YOLOv3 mAP ' + '*' * 30 + '\033[00m\n')
-    print('YOLOv3 Mean Average Precision @ 0.5 Overlap: %.3f%%\n' % (calculate_map(0.5) * 100))
+    # print('YOLOv3 Mean Average Precision @ 0.5 Overlap: %.3f%%\n' % (calculate_map(0.5) * 100))
     # print('YOLOv3 Mean Average Precision @ 0.7 Overlap: %.3f%%\n' % (calculate_map(0.7) * 100))
 
 
@@ -341,56 +341,56 @@ def run(**kwargs):
     # Start node
     rospy.init_node('main', anonymous=True)
     rospy.loginfo('Current PID: [%d]' % os.getpid())
-    tf_listener = tf.TransformListener()
+    # tf_listener = tf.TransformListener()
 
     # Setup validation
-    validation_setup()
+    # validation_setup()
     
     # Setup models
     yolov3.setup()
 
     # Find the camera to vehicle extrinsics
-    tf_listener.waitForTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(), rospy.Duration(100.0))
-    (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(0))
-    CAMERA_EXTRINSICS = pose_to_transformation(position=trans, orientation=rot)
+    # tf_listener.waitForTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(), rospy.Duration(100.0))
+    # (trans, rot) = tf_listener.lookupTransform(CAMERA_FRAME, RADAR_FRAME, rospy.Time(0))
+    # CAMERA_EXTRINSICS = pose_to_transformation(position=trans, orientation=rot)
 
     # Handle params and topics
-    camera_info = rospy.get_param('~camera_info', '/carla/ego_vehicle/camera/rgb/front/camera_info')
-    image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
-    object_array = rospy.get_param('~object_array', '/carla/objects')
+    camera_info = rospy.get_param('~camera_info', '/camera/camera_info')
+    image_color = rospy.get_param('~image_color', '/camera/image_color')
+    # object_array = rospy.get_param('~object_array', '/carla/objects')
     # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
-    radar = rospy.get_param('~radar', '/carla/ego_vehicle/radar/tracks')
+    # radar = rospy.get_param('~radar', '/carla/ego_vehicle/radar/tracks')
     output_image = rospy.get_param('~output_image', '/delta/perception/object_detection/image')
-    camera_track = rospy.get_param('~camera_track', '/delta/perception/ipm/camera_track')
-    camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
-    radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
-    occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/occupancy_grid')
+    # camera_track = rospy.get_param('~camera_track', '/delta/perception/ipm/camera_track')
+    # camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
+    # radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
+    # occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/occupancy_grid')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
     rospy.loginfo('Image topic: %s' % image_color)
-    rospy.loginfo('RADAR topic: %s' % radar)
-    rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
-    rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
+    # rospy.loginfo('RADAR topic: %s' % radar)
+    # rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
+    # rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
 
     # Publish output topic
     publishers = {}
     publishers['image_pub'] = rospy.Publisher(output_image, Image, queue_size=5)
-    publishers['tracker_pub'] = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
-    publishers['camera_marker_pub'] = rospy.Publisher(camera_track_marker, Marker, queue_size=5)
-    publishers['radar_marker_pub'] = rospy.Publisher(radar_track_marker, Marker, queue_size=5)
-    publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
+    # publishers['tracker_pub'] = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
+    # publishers['camera_marker_pub'] = rospy.Publisher(camera_track_marker, Marker, queue_size=5)
+    # publishers['radar_marker_pub'] = rospy.Publisher(radar_track_marker, Marker, queue_size=5)
+    # publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
 
     # Subscribe to topics
     info_sub = rospy.Subscriber(camera_info, CameraInfo, camera_info_callback)
     image_sub = message_filters.Subscriber(image_color, Image)
-    radar_sub = message_filters.Subscriber(radar, RadarTrackArray)
-    object_sub = message_filters.Subscriber(object_array, ObjectArray)
+    # radar_sub = message_filters.Subscriber(radar, RadarTrackArray)
+    # object_sub = message_filters.Subscriber(object_array, ObjectArray)
     # marker_sub = message_filters.Subscriber(vehicle_markers, MarkerArrayStamped)
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(
-        [image_sub, radar_sub, object_sub], queue_size=1, slop=0.5)
+        [image_sub], queue_size=1, slop=0.5)
     ats.registerCallback(perception_callback, publishers, **kwargs)
 
     # Shutdown hook

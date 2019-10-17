@@ -193,7 +193,6 @@ class OccupancyGridGenerator(object):
                           occupancy grid. The dimensions depends on the range and the
                           resolution of the occupancy grid.
         '''
-        mean, cov = np.flip(mean), np.flip(cov)
         cov_det = np.linalg.det(cov)
         cov_inv = np.linalg.inv(cov)
         N = np.sqrt((2 * np.pi) ** mean.shape[0] * cov_det)

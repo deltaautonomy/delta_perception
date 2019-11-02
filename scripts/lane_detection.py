@@ -32,7 +32,7 @@ from cv_bridge import CvBridge, CvBridgeError
 # ROS messages
 from sensor_msgs.msg import Image
 from nav_msgs.msg import OccupancyGrid
-from delta_perception.msg import LaneMarking, LaneMarkingArray
+from delta_msgs.msg import LaneMarking, LaneMarkingArray
 
 # Local python modules
 from utils import *

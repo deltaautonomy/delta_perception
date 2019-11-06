@@ -16,7 +16,7 @@ import rospy
 
 # ROS messages
 from std_msgs.msg import Header
-from delta_perception.msg import MarkerArrayStamped
+from delta_msgs.msg import MarkerArrayStamped
 from visualization_msgs.msg import Marker, MarkerArray
 
 # Globals

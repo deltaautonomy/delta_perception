@@ -11,33 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   sensor_msgs
   visualization_msgs
-  message_generation
   cv_bridge
   image_transport
-)
-
-################################################
-## Declare ROS messages, services and actions ##
-################################################
-
-## Generate messages in the 'msg' folder
-add_message_files(
-  FILES
-  CameraTrack.msg
-  CameraTrackArray.msg
-  MarkerArrayStamped.msg
-  VehicleGroundTruth.msg
-  VehicleGroundTruthArray.msg
-  LaneMarking.msg
-  LaneMarkingArray.msg
-)
-
-## Generate added messages and services with any dependencies listed here
-generate_messages(
-  DEPENDENCIES
-  std_msgs
-  sensor_msgs
-  visualization_msgs
 )
 
 ###################################
@@ -47,7 +22,7 @@ generate_messages(
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS cv_bridge image_transport roscpp sensor_msgs visualization_msgs message_runtime
+  CATKIN_DEPENDS roscpp
   # DEPENDS system_lib
 )
 

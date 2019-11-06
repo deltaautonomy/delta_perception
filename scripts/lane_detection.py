@@ -6,12 +6,6 @@ Author  : Heethesh Vhavle, Apoorv Singh
 Email   : heethesh@cmu.edu
 Version : 1.0.0
 Date    : Apr 07, 2019
-
-References:
-http://wiki.ros.org/message_filters
-http://wiki.ros.org/cv_bridge/Tutorials/
-http://docs.ros.org/api/image_geometry/html/python/
-http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscribe
 '''
 
 # Python 2/3 compatibility
@@ -31,14 +25,13 @@ from cv_bridge import CvBridge, CvBridgeError
 
 # ROS messages
 from sensor_msgs.msg import Image
-from nav_msgs.msg import OccupancyGrid
-from delta_perception.msg import LaneMarking, LaneMarkingArray
+from diagnostic_msgs.msg import DiagnosticArray
+from delta_msgs.msg import LaneMarking, LaneMarkingArray
 
 # Local python modules
 from utils import *
 from erfnet.lane_detection import ERFNetLaneDetector
 from ipm.ipm import InversePerspectiveMapping
-from occupancy_grid import OccupancyGridGenerator
 
 # Frames
 CAMERA_FRAME = 'ego_vehicle/camera/rgb/front'
@@ -47,11 +40,16 @@ EGO_VEHICLE_FRAME = 'ego_vehicle'
 # Classes
 lane_detector = ERFNetLaneDetector()
 ipm = InversePerspectiveMapping()
-# occupancy_grid = OccupancyGridGenerator(30, 100, EGO_VEHICLE_FRAME, resolution=0.2)
 lane_fps = FPSLogger('LaneNet')
 
 
 ########################### Functions ###########################
+
+
+def publish_diagnostics(publishers):
+    msg = DiagnosticArray()
+    msg.status.append(make_diagnostics_status('Lane Detector', 'Perception', str(lane_fps.fps)))
+    publishers['diag_pub'].publish(msg)
 
 
 def lane_detection(image_msg, publishers, vis=True, **kwargs):
@@ -76,20 +74,10 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     # Publish the lane data
     publishers['lane_pub'].publish(lane_array)
 
-    # # Convert x, y points to occupancy grid
-    # grid = occupancy_grid.empty_grid()
-    # for x, y in points_m: grid = occupancy_grid.place([y, -x], 100, grid)
-    # grid_msg = occupancy_grid.refresh(grid, image_msg.header.stamp)
-    # publishers['occupancy_grid_pub'].publish(grid_msg)
+    # Publish diagnostics status
+    publish_diagnostics(publishers)
 
     # Visualize and publish image message
-    # if vis:
-    #     # Display lane markings
-    #     overlay = cv2.resize(lane_img, (img.shape[1], img.shape[0]))
-    #     img = cv2.addWeighted(img, 1.0, overlay, 1.0, 0)
-    
-    # ipm_img = ipm.transform_image(img)
-    # output = lane_detector.hough_line_detector(lane_img, ipm_img)
     cv2_to_message(output, publishers['image_pub'])
 
 
@@ -108,10 +96,6 @@ def run(**kwargs):
     rospy.init_node('lane_detection', anonymous=True)
     rospy.loginfo('Current PID: [%d]' % os.getpid())
 
-    # Wait for main perception to start first
-    # rospy.wait_for_message('/delta/perception/object_detection/image', Image)
-    # rospy.wait_for_message('/delta/perception/segmentation/image', Image)
-
     # Setup models
     lane_detector.setup()
 
@@ -119,19 +103,18 @@ def run(**kwargs):
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
     lane_output = rospy.get_param('~lane_output', '/delta/perception/lane_detection/markings')
     output_image = rospy.get_param('~output_image', '/delta/perception/lane_detection/image')
-    # occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/lane_detection/occupancy_grid')
+    diagnostics = rospy.get_param('~diagnostics', '/delta/perception/lane_detection/diagnostics')
 
     # Display params and topics
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('Lane marking topic: %s' % lane_output)
     rospy.loginfo('Output topic: %s' % output_image)
-    # rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
 
     # Publish output topic
     publishers = {}
     publishers['lane_pub'] = rospy.Publisher(lane_output, LaneMarkingArray, queue_size=5)
     publishers['image_pub'] = rospy.Publisher(output_image, Image, queue_size=5)
-    # publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
+    publishers['diag_pub'] = rospy.Publisher(diagnostics, DiagnosticArray, queue_size=5)
 
     # Subscribe to topics
     image_sub = message_filters.Subscriber(image_color, Image)

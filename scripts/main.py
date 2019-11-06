@@ -6,12 +6,6 @@ Author  : Heethesh Vhavle
 Email   : heethesh@cmu.edu
 Version : 1.0.0
 Date    : Apr 07, 2019
-
-References:
-http://wiki.ros.org/message_filters
-http://wiki.ros.org/cv_bridge/Tutorials/
-http://docs.ros.org/api/image_geometry/html/python/
-http://wiki.ros.org/ROS/Tutorials/WritingPublisherSubscribe
 '''
 
 # Python 2/3 compatibility
@@ -19,8 +13,6 @@ from __future__ import print_function, absolute_import, division
 
 # Handle paths and OpenCV import
 from init_paths import *
-
-# Built-in modules
 
 # External modules
 import matplotlib.pyplot as plt
@@ -34,11 +26,10 @@ from cv_bridge import CvBridge, CvBridgeError
 # ROS messages
 from visualization_msgs.msg import Marker
 from sensor_msgs.msg import Image, CameraInfo
-from delta_perception.msg import MarkerArrayStamped
-from delta_perception.msg import CameraTrack, CameraTrackArray
+from diagnostic_msgs.msg import DiagnosticArray
+from delta_msgs.msg import MarkerArrayStamped, CameraTrack, CameraTrackArray
 from radar_msgs.msg import RadarTrack, RadarTrackArray
 from derived_object_msgs.msg import Object, ObjectArray
-from nav_msgs.msg import OccupancyGrid
 
 # Local python modules
 from utils import *
@@ -47,7 +38,6 @@ from darknet.darknet_video import YOLO
 from ipm.ipm import InversePerspectiveMapping
 from validator.calculate_map import calculate_map
 from cube_marker_publisher import make_cuboid
-from occupancy_grid import OccupancyGridGenerator
 
 # Global objects
 STOP_FLAG = False
@@ -69,16 +59,12 @@ VEHICLE_FRAME = 'vehicle/%03d/autopilot'
 yolov3 = YOLO()
 ipm = InversePerspectiveMapping()
 tracker = Sort(max_age=200, min_hits=1, use_dlib=False)
-occupancy_grid = OccupancyGridGenerator(30, 100, EGO_VEHICLE_FRAME)
-# tracker = Sort(max_age=20, min_hits=1, use_dlib=True)
-# yolo_validator = ObjectDetectionValidator()
 
 # FPS loggers
 FRAME_COUNT = 0
 all_fps = FPSLogger('Pipeline')
 yolo_fps = FPSLogger('YOLOv3')
 sort_fps = FPSLogger('Tracker')
-fusion_fps = FPSLogger('Fusion')
 
 
 ########################### Functions ###########################
@@ -254,18 +240,11 @@ def publish_camera_tracks(publishers, tracked_targets, detections, timestamp):
     publishers['tracker_pub'].publish(camera_track_array)
 
 
-def publish_occupancy_grid(publishers, tracked_targets, radar_msg):
-    grid = occupancy_grid.empty_grid()
-    for track in radar_msg.tracks:
-        pos = position_to_numpy(track.track_shape.points[0])
-        grid = occupancy_grid.place(pos, 100, grid)
-
-    # for target in tracked_targets:
-    #     u1, v1, u2, v2, track_id = target
-    #     x, y = ipm.transform_points_to_m([(u1 + u2) / 2, (v1 + v2) / 2])
-
-    grid_msg = occupancy_grid.refresh(grid, radar_msg.header.stamp)
-    publishers['occupancy_grid_pub'].publish(grid_msg)
+def publish_diagnostics(publishers):
+    msg = DiagnosticArray()
+    msg.status.append(make_diagnostics_status('Object Detector', 'Perception', str(yolo_fps.fps)))
+    msg.status.append(make_diagnostics_status('Bounding Box Tracker', 'Perception', str(sort_fps.fps)))
+    publishers['diag_pub'].publish(msg)
 
 
 def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
@@ -282,7 +261,8 @@ def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
 
     # Object tracking
     sort_fps.lap()
-    dets = np.asarray([[bbox[0], bbox[1], bbox[2], bbox[3], score] for label, score, bbox in detections])
+    dets = np.asarray([[bbox[0], bbox[1], bbox[2], bbox[3], score]
+                       for label, score, bbox in detections])
     tracked_targets = tracker.update(dets, img)
     sort_fps.tick()
 
@@ -293,14 +273,14 @@ def perception_pipeline(img, radar_msg, publishers, vis=True, **kwargs):
     # RADAR tracking
     radar_targets = get_radar_targets(radar_msg)
 
-    # Publish occupancy grid
-    publish_occupancy_grid(publishers, tracked_targets, radar_msg)
-
     # Display FPS logger status
     all_fps.tick()
-    sys.stdout.write('\r%s | %s | %s ' % (all_fps.get_log(),
-        yolo_fps.get_log(), sort_fps.get_log()))
-    sys.stdout.flush()
+    # sys.stdout.write('\r%s | %s | %s ' % (all_fps.get_log(),
+    #     yolo_fps.get_log(), sort_fps.get_log()))
+    # sys.stdout.flush()
+
+    # Publish diagnostics status
+    publish_diagnostics(publishers)
 
     # Visualize and publish image message
     if vis: visualize(img, tracked_targets, detections, radar_targets, publishers)
@@ -358,13 +338,13 @@ def run(**kwargs):
     camera_info = rospy.get_param('~camera_info', '/carla/ego_vehicle/camera/rgb/front/camera_info')
     image_color = rospy.get_param('~image_color', '/carla/ego_vehicle/camera/rgb/front/image_color')
     object_array = rospy.get_param('~object_array', '/carla/objects')
-    # vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker_array')
     radar = rospy.get_param('~radar', '/carla/ego_vehicle/radar/tracks')
     output_image = rospy.get_param('~output_image', '/delta/perception/object_detection/image')
     camera_track = rospy.get_param('~camera_track', '/delta/perception/ipm/camera_track')
     camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
     radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
     occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/occupancy_grid')
+    diagnostics = rospy.get_param('~diagnostics', '/delta/perception/object_detection/diagnostics')
 
     # Display params and topics
     rospy.loginfo('CameraInfo topic: %s' % camera_info)
@@ -372,6 +352,7 @@ def run(**kwargs):
     rospy.loginfo('RADAR topic: %s' % radar)
     rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
     rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
+    rospy.loginfo('Diagnostics topic: %s' % diagnostics)
 
     # Publish output topic
     publishers = {}
@@ -380,13 +361,13 @@ def run(**kwargs):
     publishers['camera_marker_pub'] = rospy.Publisher(camera_track_marker, Marker, queue_size=5)
     publishers['radar_marker_pub'] = rospy.Publisher(radar_track_marker, Marker, queue_size=5)
     publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
+    publishers['diag_pub'] = rospy.Publisher(diagnostics, DiagnosticArray, queue_size=5)
 
     # Subscribe to topics
     info_sub = rospy.Subscriber(camera_info, CameraInfo, camera_info_callback)
     image_sub = message_filters.Subscriber(image_color, Image)
     radar_sub = message_filters.Subscriber(radar, RadarTrackArray)
     object_sub = message_filters.Subscriber(object_array, ObjectArray)
-    # marker_sub = message_filters.Subscriber(vehicle_markers, MarkerArrayStamped)
 
     # Synchronize the topics by time
     ats = message_filters.ApproximateTimeSynchronizer(

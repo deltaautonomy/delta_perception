@@ -17,7 +17,6 @@ import PIL.Image
 # ROS modules
 import rospy
 from cv_bridge import CvBridge, CvBridgeError
-from sensor_msgs.msg import Image, CameraInfo
 from diagnostic_msgs.msg import DiagnosticStatus
 from tf.transformations import (translation_matrix,
                                 quaternion_matrix,
@@ -78,12 +77,12 @@ def message_to_cv2(msg):
         return None
 
 
-def cv2_to_message(img, topic):
+def cv2_to_message(img, pub):
     # Publish image using CV bridge
     if len(img.shape) == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     try:
-        topic.publish(CV_BRIDGE.cv2_to_imgmsg(img, "bgr8"))
+        pub.publish(CV_BRIDGE.cv2_to_imgmsg(img, 'bgr8'))
     except CvBridgeError as e: 
         print(e)
         rospy.logerr(e)

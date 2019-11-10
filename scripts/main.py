@@ -147,7 +147,8 @@ def validate(image, objects, detections, image_pub, **kwargs):
                 # cv2_to_message(image, image_pub)
 
         except (tf.LookupException, tf.ConnectivityException, tf.ExtrapolationException) as e:
-            print('Exception', e)
+            # print('Exception', e)
+            pass
 
     # Save image
     # cv2.imwrite(osp.join(PKG_PATH, 'results/images-optional', 'frame_%05d.jpg' % FRAME_COUNT), image)
@@ -242,8 +243,9 @@ def publish_camera_tracks(publishers, tracked_targets, detections, timestamp):
 
 def publish_diagnostics(publishers):
     msg = DiagnosticArray()
-    msg.status.append(make_diagnostics_status('Object Detector', 'Perception', str(yolo_fps.fps)))
-    msg.status.append(make_diagnostics_status('Bounding Box Tracker', 'Perception', str(sort_fps.fps)))
+    msg.header.stamp = rospy.Time.now()
+    msg.status.append(make_diagnostics_status('object_detection', 'perception', str(yolo_fps.fps)))
+    msg.status.append(make_diagnostics_status('bounding_box_tracking', 'perception', str(sort_fps.fps)))
     publishers['diag_pub'].publish(msg)
 
 
@@ -343,7 +345,6 @@ def run(**kwargs):
     camera_track = rospy.get_param('~camera_track', '/delta/perception/ipm/camera_track')
     camera_track_marker = rospy.get_param('~camera_track_marker', '/delta/perception/camera_track_marker')
     radar_track_marker = rospy.get_param('~radar_track_marker', '/delta/perception/radar_track_marker')
-    occupancy_grid_topic = rospy.get_param('~occupancy_grid', '/delta/perception/occupancy_grid')
     diagnostics = rospy.get_param('~diagnostics', '/delta/perception/object_detection/diagnostics')
 
     # Display params and topics
@@ -351,7 +352,6 @@ def run(**kwargs):
     rospy.loginfo('Image topic: %s' % image_color)
     rospy.loginfo('RADAR topic: %s' % radar)
     rospy.loginfo('CameraTrackArray topic: %s' % camera_track)
-    rospy.loginfo('OccupancyGrid topic: %s' % occupancy_grid_topic)
     rospy.loginfo('Diagnostics topic: %s' % diagnostics)
 
     # Publish output topic
@@ -360,7 +360,6 @@ def run(**kwargs):
     publishers['tracker_pub'] = rospy.Publisher(camera_track, CameraTrackArray, queue_size=5)
     publishers['camera_marker_pub'] = rospy.Publisher(camera_track_marker, Marker, queue_size=5)
     publishers['radar_marker_pub'] = rospy.Publisher(radar_track_marker, Marker, queue_size=5)
-    publishers['occupancy_grid_pub'] = rospy.Publisher(occupancy_grid_topic, OccupancyGrid, queue_size=5)
     publishers['diag_pub'] = rospy.Publisher(diagnostics, DiagnosticArray, queue_size=5)
 
     # Subscribe to topics

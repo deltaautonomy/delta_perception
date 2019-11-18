@@ -94,8 +94,8 @@ class ERFNetLaneDetector:
 
         # Postprocess.
         postprocessed_map = self.postprocess(lane_maps, lane_exist)
-        output = self.occupancy_map(postprocessed_map, img.copy(), timestamp)
-        return output
+        output, lanes = self.occupancy_map(postprocessed_map, img.copy(), timestamp)
+        return output, lanes
 
     def preprocess(self, img):
         # Resizing to network width.
@@ -158,7 +158,7 @@ class ERFNetLaneDetector:
 
         # Find all lines (n * [x1, y1, x2, y2]).
         dst, lines, n_points = self.hough_line_detector(ipm_lane, ipm_img)
-        if lines is None: return output
+        if lines is None: return output, None
 
         # Compute slope and intercept of all lines.
         slopes = (lines[:, 2] - lines[:, 0]) / (lines[:, 3] - lines[:, 1])
@@ -178,9 +178,14 @@ class ERFNetLaneDetector:
 
         # Kalman filter initialization.
         if self.first_time:
-            self.first_time = False
-            assert len(medians) == 3, 'Initialization requires medians for all lanes'
-            self.lane_filter.initialize_filter(timestamp.to_sec(), medians)
+            if len(medians) == 3:
+                self.first_time = False
+                self.lane_filter.initialize_filter(timestamp.to_sec(), medians)
+            else:
+                sys.stdout.write("\r\033[31mInitialization requires medians for all lanes\t" )
+                sys.stdout.flush()
+                return None, None
+
 
         # Kalman filter predict/update.
         pred_medians = self.lane_filter.predict_step(timestamp.to_sec())

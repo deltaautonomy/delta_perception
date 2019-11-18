@@ -52,42 +52,18 @@ def callback(marker, debug=False, **kwargs):
     if debug: print(marker.header.frame_id, marker.header.stamp.nsecs)
 
 
-def callback2(marker, debug=False, **kwargs):
-    global marker_array, marker_array_header
-
-    # Skip ego vehicle marker
-    if marker.header.frame_id == 'ego_vehicle': return
-    
-    # New timestamp batch
-    if marker_array_header.stamp.nsecs != marker.header.stamp.nsecs:
-        # Publish the old marker array
-        if marker_array is not None:
-            # marker_array.header.stamp = marker_array_header.stamp
-            marker_pub.publish(marker_array)
-            if debug: print('Publishing marker array with stamp: %d and %d vehicles' % (marker_array_header.stamp.nsecs, len(marker_array.markers)))
-
-        # Reset marker array
-        marker_array = MarkerArray()
-        marker_array_header.stamp = marker.header.stamp
-        if debug: print('\nNew batch:', marker_array_header.stamp.nsecs)
-    
-    # Add markers to marker array
-    marker_array.markers.append(marker)
-    if debug: print(marker.header.frame_id, marker.header.stamp.nsecs)
-        
-
 def run(**kwargs):
     global marker_pub
 
     # Start node
     rospy.init_node('marker_array_publisher', anonymous=True)
-    
+
     # Handle params and topics
     vehicle_markers = rospy.get_param('~vehicle_markers', '/carla/vehicle_marker')
-    vehicle_marker_array = rospy.get_param('~vehicle_marker_array', '/carla/vehicle_marker_array')
+    vehicle_marker_array = rospy.get_param('~vehicle_marker_array', '/delta/visualization/vehicle_marker_array')
 
     # Publish marker array
-    marker_pub = rospy.Publisher(vehicle_marker_array, MarkerArrayStamped, queue_size=500)
+    marker_pub = rospy.Publisher(vehicle_marker_array, MarkerArrayStamped, queue_size=10)
 
     # Subscribe to topics
     marker_sub = rospy.Subscriber(vehicle_markers, Marker, callback)

@@ -62,6 +62,12 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     output, lanes = lane_detector.run(img, rospy.Time.now())
     lane_fps.tick()
 
+    # Publish diagnostics status
+    publish_diagnostics(publishers)
+
+    if output is None or lanes is None:
+        return
+
     # Convert to lane marking array
     lane_array = LaneMarkingArray()
     lane_array.header.stamp = image_msg.header.stamp
@@ -74,8 +80,6 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
     # Publish the lane data
     publishers['lane_pub'].publish(lane_array)
 
-    # Publish diagnostics status
-    publish_diagnostics(publishers)
 
     # Visualize and publish image message
     cv2_to_message(output, publishers['image_pub'])

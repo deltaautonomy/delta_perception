@@ -48,7 +48,7 @@ lane_fps = FPSLogger('LaneNet')
 
 def publish_diagnostics(publishers):
     msg = DiagnosticArray()
-    msg.status.append(make_diagnostics_status('Lane Detector', 'Perception', str(lane_fps.fps)))
+    msg.status.append(make_diagnostics_status('lane_detection', 'perception', str(lane_fps.fps)))
     publishers['diag_pub'].publish(msg)
 
 

@@ -105,7 +105,7 @@ def callback(image_msg, image_gt_msg, image_pub, **kwargs):
     print(PRED_COUNTER, GT_COUNTER, PRED_COUNTER / GT_COUNTER)
 
     # cv2_to_message(output, image_pub)
-    cv2_to_message(output_image, image_pub)
+    cv2_to_message(output_image, image_pub, coding='bgra8')
 
 
 def shutdown_hook():

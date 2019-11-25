@@ -66,10 +66,10 @@ def cv_image(img):
     return cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
 
 
-def message_to_cv2(msg):
+def message_to_cv2(msg, coding='bgr8'):
     # Read image using CV bridge
     try:
-        img = CV_BRIDGE.imgmsg_to_cv2(msg, 'bgr8')
+        img = CV_BRIDGE.imgmsg_to_cv2(msg, coding)
         return img
     except CvBridgeError as e:
         print(e)
@@ -77,12 +77,12 @@ def message_to_cv2(msg):
         return None
 
 
-def cv2_to_message(img, pub):
+def cv2_to_message(img, pub, coding='bgr8'):
     # Publish image using CV bridge
     if len(img.shape) == 2:
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
     try:
-        pub.publish(CV_BRIDGE.cv2_to_imgmsg(img, 'bgr8'))
+        pub.publish(CV_BRIDGE.cv2_to_imgmsg(img, coding))
     except CvBridgeError as e: 
         print(e)
         rospy.logerr(e)

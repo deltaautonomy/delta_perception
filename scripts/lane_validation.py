@@ -23,6 +23,8 @@ from init_paths import *
 # External modules
 import PIL
 from cStringIO import StringIO
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # ROS modules
@@ -67,6 +69,9 @@ def plot(points_det, points_gt):
     plt.plot(points_det[3:6, 0], points_det[3:6, 1], '-g', linewidth=2.0, label='Detection')
     plt.plot(points_det[6:9, 0], points_det[6:9, 1], '-g', linewidth=2.0, label='Detection')
 
+    plt.legend()
+    plt.grid()
+
     # convert canvas to image
     # plt.imshow(np.random.random((20,20)))
     buffer_ = StringIO()
@@ -74,7 +79,7 @@ def plot(points_det, points_gt):
     buffer_.seek(0)
     image = PIL.Image.open(buffer_)
     graph_image = np.asarray(image)
-    plt.close()
+    plt.close(fig)
     return graph_image
 
 

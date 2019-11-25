@@ -59,9 +59,9 @@ lane_fps = FPSLogger('LaneNet')
 def plot(points_det, points_gt):
     fig = plt.figure()
 
-    plt.plot(points_gt[0:3, 0], points_gt[0:3, 1], '-b', linewidth=2.0, label='Ground Truth')
-    plt.plot(points_gt[3:6, 0], points_gt[3:6, 1], '-b', linewidth=2.0, label='Ground Truth')
-    plt.plot(points_gt[6:9, 0], points_gt[6:9, 1], '-b', linewidth=2.0, label='Ground Truth')
+    plt.plot(points_gt[0:3, 0], points_gt[0:3, 1], '-r', linewidth=2.0, label='Ground Truth')
+    plt.plot(points_gt[3:6, 0], points_gt[3:6, 1], '-r', linewidth=2.0, label='Ground Truth')
+    plt.plot(points_gt[6:9, 0], points_gt[6:9, 1], '-r', linewidth=2.0, label='Ground Truth')
 
     plt.plot(points_det[0:3, 0], points_det[0:3, 1], '-g', linewidth=2.0, label='Detection')
     plt.plot(points_det[3:6, 0], points_det[3:6, 1], '-g', linewidth=2.0, label='Detection')
@@ -74,6 +74,7 @@ def plot(points_det, points_gt):
     buffer_.seek(0)
     image = PIL.Image.open(buffer_)
     graph_image = np.asarray(image)
+    plt.close()
     return graph_image
 
 
@@ -96,13 +97,15 @@ def callback(image_msg, image_gt_msg, image_pub, **kwargs):
     points_gt = lane_validator.slope_intercept_to_points(lanes_gt)
 
     # Plot
-    # output_image = plot(points_det, points_gt)
-    output_image = np.concatenate((output_det, output_gt), axis=1)
+    output_image = plot(points_det, points_gt)
+    # output_image = np.concatenate((output_det, output_gt), axis=1)
 
     # Computer error
     PRED_COUNTER += np.sum(np.int64(np.abs(points_det - points_gt)[:, 1] < 0.65))
     GT_COUNTER += 9
-    print(PRED_COUNTER, GT_COUNTER, PRED_COUNTER / GT_COUNTER)
+    text = '\r%03d / %03d | Accuracy %.2f%%  ' % (PRED_COUNTER, GT_COUNTER, PRED_COUNTER / GT_COUNTER)
+    sys.stdout.write(text)
+    sys.stdout.flush()
 
     # cv2_to_message(output, image_pub)
     cv2_to_message(output_image, image_pub, coding='bgra8')

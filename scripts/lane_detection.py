@@ -48,7 +48,7 @@ lane_fps = FPSLogger('LaneNet')
 
 def publish_diagnostics(publishers):
     msg = DiagnosticArray()
-    msg.status.append(make_diagnostics_status('lane_detection', 'perception', str(lane_fps.fps)))
+    msg.status.append(make_diagnostics_status('lane_detection', 'perception_', str(lane_fps.fps)))
     publishers['diag_pub'].publish(msg)
 
 
@@ -79,7 +79,6 @@ def lane_detection(image_msg, publishers, vis=True, **kwargs):
 
     # Publish the lane data
     publishers['lane_pub'].publish(lane_array)
-
 
     # Visualize and publish image message
     cv2_to_message(output, publishers['image_pub'])

@@ -87,10 +87,11 @@ class ERFNetLaneDetector:
         inputs = self.preprocess(img.copy())
 
         # Detect lane markings.
-        output, output_exist = self.model(inputs)
-        output = torch.softmax(output, dim=1)
-        lane_maps = output.data.cpu().numpy()
-        lane_exist = output_exist.data.cpu().numpy()
+        with torch.no_grad():
+            output, output_exist = self.model(inputs)
+            output = torch.softmax(output, dim=1)
+            lane_maps = output.data.cpu().numpy()
+            lane_exist = output_exist.data.cpu().numpy()
 
         # Postprocess.
         postprocessed_map = self.postprocess(lane_maps, lane_exist)
@@ -185,7 +186,6 @@ class ERFNetLaneDetector:
                 sys.stdout.write("\r\033[31mInitialization requires medians for all lanes\t" )
                 sys.stdout.flush()
                 return None, None
-
 
         # Kalman filter predict/update.
         pred_medians = self.lane_filter.predict_step(timestamp.to_sec())

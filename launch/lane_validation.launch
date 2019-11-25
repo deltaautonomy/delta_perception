@@ -3,7 +3,7 @@
 
     <!-- Play rosbag record -->
     <include file="$(find delta_perception)/launch/play_rosbag.launch">
-        <arg name="filename" value="$(find delta_perception)/bags/Pittsburgh-02.bag" />
+        <arg name="filename" value="$(find delta_perception)/bags/Pittsburgh-03.bag" />
         <!-- <arg name="filename" value="$(find delta_perception)/bags/Pittsburgh-02.bag" /> -->
     </include>
 
@@ -22,7 +22,7 @@
         type="image_view"
         respawn="false"
         output="screen">
-        <remap from="image" to="/delta/perception/lane_validation" />
+        <remap from="image" to="/delta/perception/lane_validation/image" />
     </node>
 
     <!-- Display output image -->

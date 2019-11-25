@@ -21,6 +21,8 @@ from __future__ import print_function, absolute_import, division
 from init_paths import *
 
 # External modules
+import PIL
+from cStringIO import StringIO
 import matplotlib.pyplot as plt
 
 # ROS modules
@@ -54,6 +56,27 @@ lane_fps = FPSLogger('LaneNet')
 ########################### Functions ###########################
 
 
+def plot(points_det, points_gt):
+    fig = plt.figure()
+
+    plt.plot(points_gt[0:3, 0], points_gt[0:3, 1], '-b', linewidth=2.0, label='Ground Truth')
+    plt.plot(points_gt[3:6, 0], points_gt[3:6, 1], '-b', linewidth=2.0, label='Ground Truth')
+    plt.plot(points_gt[6:9, 0], points_gt[6:9, 1], '-b', linewidth=2.0, label='Ground Truth')
+
+    plt.plot(points_det[0:3, 0], points_det[0:3, 1], '-g', linewidth=2.0, label='Detection')
+    plt.plot(points_det[3:6, 0], points_det[3:6, 1], '-g', linewidth=2.0, label='Detection')
+    plt.plot(points_det[6:9, 0], points_det[6:9, 1], '-g', linewidth=2.0, label='Detection')
+
+    # convert canvas to image
+    # plt.imshow(np.random.random((20,20)))
+    buffer_ = StringIO()
+    plt.savefig(buffer_, format="png")
+    buffer_.seek(0)
+    image = PIL.Image.open(buffer_)
+    graph_image = np.asarray(image)
+    return graph_image
+
+
 def callback(image_msg, image_gt_msg, image_pub, **kwargs):
     # Read image message
     global GT_COUNTER, PRED_COUNTER
@@ -63,24 +86,32 @@ def callback(image_msg, image_gt_msg, image_pub, **kwargs):
     img_gt = message_to_cv2(image_gt_msg)
 
     # Get slope intercepts of lanes
-    output, lanes_det = lane_detector.run(img, rospy.Time.now())
-    output, lanes_gt = validator.detect_lines(img, rospy.Time.now())
+    output_det, lanes_det = lane_detector.run(img, rospy.Time.now())
+    if output_det is None: return
+    output_gt, lanes_gt = lane_validator.detect_lines(img_gt, rospy.Time.now())
+    if output_gt is None: return
 
     # Convert to points
-    points_det = validator.slope_intercept_to_points(lanes_det)
-    points_gt = validator.slope_intercept_to_points(lanes_gt)
+    points_det = lane_validator.slope_intercept_to_points(lanes_det)
+    points_gt = lane_validator.slope_intercept_to_points(lanes_gt)
+
+    # Plot
+    # output_image = plot(points_det, points_gt)
+    output_image = np.concatenate((output_det, output_gt), axis=1)
 
     # Computer error
-    PRED_COUNTER += np.sum(np.int64(np.abs(points_det - points_gt)[:, 1] < 0.5))
+    PRED_COUNTER += np.sum(np.int64(np.abs(points_det - points_gt)[:, 1] < 0.65))
     GT_COUNTER += 9
+    print(PRED_COUNTER, GT_COUNTER, PRED_COUNTER / GT_COUNTER)
 
-    cv2_to_message(img_gt, image_pub)
+    # cv2_to_message(output, image_pub)
+    cv2_to_message(output_image, image_pub)
 
 
 def shutdown_hook():
     print('\n\033[95m' + '*' * 30 + ' Lane Validation Shutdown ' + '*' * 30 + '\033[00m\n')
     lane_detector.close()
-    # print('Lane Detection Accuracy: %.2f%%\n' % (PRED_COUNTER * 100.0 / GT_COUNTER))
+    print('Lane Detection Accuracy: %.2f%%\n' % (PRED_COUNTER * 100.0 / GT_COUNTER))
 
 
 def run(**kwargs):

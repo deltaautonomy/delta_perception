@@ -147,7 +147,7 @@ class LaneValidator:
 
     @staticmethod
     def slope_intercept_to_points(lanes):
-        x = np.linspace(0, 100, 3)
+        x = np.linspace(10, 100, 3)
         y1 = lanes[0, 0] * x + lanes[0, 1]
         y2 = lanes[1, 0] * x + lanes[1, 1]
         y3 = lanes[2, 0] * x + lanes[2, 1]
